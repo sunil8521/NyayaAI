@@ -7,13 +7,16 @@ const client = new MongoClient(process.env.MONGODB_URI!);
 const db = client.db();
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:4000',
+  baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://192.168.1.54:3000',
     'http://localhost:4000',
+    ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+    ...(process.env.CLIENT_ORIGIN ? [process.env.CLIENT_ORIGIN] : []),
+    ...(process.env.NEXT_PUBLIC_APP_URL ? [process.env.NEXT_PUBLIC_APP_URL] : []),
   ],
   account: {
     skipStateCookieCheck: true,

@@ -69,4 +69,4 @@ import { LanggraphModule } from './langgraph/langgraph.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
