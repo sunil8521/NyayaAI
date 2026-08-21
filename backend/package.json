@@ -42,7 +42,6 @@
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "tools": "link:@langchain/core/tools",
     "zod": "^4.4.3"
   },
   "devDependencies": {
