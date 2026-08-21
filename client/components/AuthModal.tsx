@@ -178,7 +178,10 @@ export default function AuthModal() {
 
   if (!isAuthModalOpen && !isMissingMobile) return null;
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL!;
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
