@@ -1,37 +1,42 @@
-# 1. Base Stage
-FROM node:20-alpine AS base
+# Stage 1: Build the application
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
-WORKDIR /app
 
-# 2. Dependencies Stage
-FROM base AS deps
-WORKDIR /app
-
+# Copy package files to leverage Docker layer caching
 COPY package.json pnpm-lock.yaml* ./
+
+# Install all dependencies (including devDependencies for nest build)
 RUN pnpm i --frozen-lockfile
 
-# 3. Builder Stage
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code and build NestJS TypeScript into production JavaScript
 COPY . .
-
 RUN pnpm run build
 
-# 4. Production Runner Stage
+# Stage 2: Run the production application
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=4000
 
+# Secure container by creating a non-root system user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./package.json
+# Enable pnpm for production install
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Copy package definitions and install ONLY production dependencies (prunes devDependencies)
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm i --prod --frozen-lockfile
+
+# Copy the built production code from builder stage
+COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+
+# Run under secure non-root user
 USER nestjs
 
 EXPOSE 4000
