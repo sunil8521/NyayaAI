@@ -1,6 +1,3 @@
 packages:
   - "client"
   - "backend"
-allowBuilds:
-  msgpackr-extract: set this to true or false
-  unrs-resolver: set this to true or false

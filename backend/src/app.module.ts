@@ -28,7 +28,7 @@ import { LanggraphModule } from './langgraph/langgraph.module';
       }),
     }),
 
-    /* ─── Disabled for lightweight deployment (uncomment when using document ingestion) ───
+    /* ─── Disabled Redis & Qdrant for lightweight Auth-first run ───
     // BullMQ — Redis-backed job queue
     BullModule.forRootAsync({
       imports: [ConfigModule],

@@ -1,18 +1,16 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ChatService } from 'src/chat/chat.service';
 import { ToolsService } from './tools.service';
-import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
-import { StateGraph, START, MessagesAnnotation, MemorySaver } from '@langchain/langgraph';
+
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { StateGraph, START, END, MessagesAnnotation, MemorySaver, CompiledStateGraph } from '@langchain/langgraph';
 
 @Injectable()
 export class WorkflowService implements OnModuleInit {
   private readonly logger = new Logger(WorkflowService.name);
-  private app: any;
+  private app!: CompiledStateGraph<any, any, any>;
 
-  constructor(
-    private readonly chatService: ChatService,
-    private readonly toolsService: ToolsService,
-  ) {}
+  constructor(private readonly chatService: ChatService, private readonly toolsService: ToolsService) { }
 
   async onModuleInit(): Promise<void> {
     const tools = this.toolsService.getTools();
@@ -23,16 +21,14 @@ export class WorkflowService implements OnModuleInit {
       const response = await llmWithTools.invoke(state.messages);
       if (response.tool_calls && response.tool_calls.length > 0) {
         for (const call of response.tool_calls) {
-          this.logger.log(
-            `🤖 [LLM Decision] Tool requested: "${call.name}" with args: ${JSON.stringify(call.args)}`,
-          );
+          this.logger.log(`🤖 [LLM Decision] Tool requested: "${call.name}" with args: ${JSON.stringify(call.args)}`);
         }
       }
       return { messages: [response] };
     };
     const checkpointer = new MemorySaver();
 
-    const graph = (new StateGraph(MessagesAnnotation) as any)
+    const graph = new StateGraph(MessagesAnnotation)
       .addNode('chatbot', chatbot)
       .addNode('tools', toolNode)
       .addEdge(START, 'chatbot')
@@ -43,7 +39,9 @@ export class WorkflowService implements OnModuleInit {
   }
 
   async executeChat(inputMessages: any[], threadId: string): Promise<any> {
-    const config = { configurable: { thread_id: threadId || '1' } };
+    const config = { configurable: { thread_id: "1" } };
     return this.app.invoke({ messages: inputMessages }, config);
   }
+
+
 }
