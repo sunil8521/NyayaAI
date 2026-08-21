@@ -1,5 +1,10 @@
 import type { NextConfig } from "next";
 
+const backendUrl =
+  process.env.BACKEND_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:4000";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: true,
@@ -20,15 +25,15 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/auth/:path*",
-        destination: "http://localhost:4000/api/auth/:path*",
+        destination: `${backendUrl}/api/auth/:path*`,
       },
       {
         source: "/api/users/:path*",
-        destination: "http://localhost:4000/users/:path*",
+        destination: `${backendUrl}/users/:path*`,
       },
       {
         source: "/api/chat",
-        destination: "http://localhost:4000/chat",
+        destination: `${backendUrl}/chat`,
       },
     ];
   },

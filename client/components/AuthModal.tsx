@@ -165,9 +165,10 @@ export default function AuthModal() {
     };
   }, [isAuthModalOpen, isMissingMobile, closeAuthModal]);
 
-  if (!isAuthModalOpen && !isMissingMobile) return null;
-
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
