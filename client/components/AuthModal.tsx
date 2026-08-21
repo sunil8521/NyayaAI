@@ -119,6 +119,17 @@ export default function AuthModal() {
 
   const isMissingMobile = !isPhoneCompleted && session?.user && !(session.user as any).mobile;
 
+  const handleClose = () => {
+    closeAuthModal();
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("auth");
+      url.searchParams.delete("error");
+      const newQuery = url.search ? url.search : "";
+      window.history.replaceState({}, "", url.pathname + newQuery);
+    }
+  };
+
   // Reset states on tab change
   useEffect(() => {
     setAuthError(null);
@@ -153,7 +164,7 @@ export default function AuthModal() {
   // Escape key listener
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isMissingMobile) closeAuthModal();
+      if (e.key === "Escape" && !isMissingMobile) handleClose();
     };
     if (isAuthModalOpen || isMissingMobile) {
       document.addEventListener("keydown", handleEsc);
@@ -164,6 +175,8 @@ export default function AuthModal() {
       document.body.style.overflow = "";
     };
   }, [isAuthModalOpen, isMissingMobile, closeAuthModal]);
+
+  if (!isAuthModalOpen && !isMissingMobile) return null;
 
   const origin = process.env.NEXT_PUBLIC_APP_URL!;
 
@@ -277,7 +290,7 @@ export default function AuthModal() {
     <div
       ref={overlayRef}
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      onClick={(e) => e.target === overlayRef.current && !isMissingMobile && closeAuthModal()}
+      onClick={(e) => e.target === overlayRef.current && !isMissingMobile && handleClose()}
     >
       <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm animate-fade-in" />
 
@@ -291,7 +304,8 @@ export default function AuthModal() {
         <div className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
           {!isMissingMobile && (
             <button
-              onClick={closeAuthModal}
+              type="button"
+              onClick={handleClose}
               className="absolute top-4 right-4 md:top-5 md:right-5 text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4] transition-colors z-10 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
               aria-label="Close modal"
             >
