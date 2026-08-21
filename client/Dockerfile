@@ -1,6 +1,7 @@
 # 1. Base Stage
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN pnpm config set ignore-scripts true
 WORKDIR /app
 
 # 2. Dependencies Stage
@@ -23,7 +24,7 @@ ENV NODE_ENV=production
 RUN pnpm run build
 
 # 4. Production Runner Stage
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

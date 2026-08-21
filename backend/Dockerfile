@@ -1,9 +1,10 @@
 # Stage 1: Build the application
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN pnpm config set ignore-scripts true
 
 # Copy package files to leverage Docker layer caching
 COPY package.json pnpm-lock.yaml* ./
@@ -16,7 +17,7 @@ COPY . .
 RUN pnpm run build
 
 # Stage 2: Run the production application
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -28,6 +29,7 @@ RUN adduser --system --uid 1001 nestjs
 
 # Enable pnpm for production install
 RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN pnpm config set ignore-scripts true
 
 # Copy package definitions and install ONLY production dependencies (prunes devDependencies)
 COPY package.json pnpm-lock.yaml* ./
