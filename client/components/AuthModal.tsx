@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm, FieldErrors, UseFormRegisterReturn } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import {
   FiX,
   FiArrowRight,
@@ -165,10 +165,7 @@ export default function AuthModal() {
     };
   }, [isAuthModalOpen, isMissingMobile, closeAuthModal]);
 
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const origin = process.env.NEXT_PUBLIC_APP_URL!;
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
