@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - 'client/**'
+      - '.github/workflows/client-deploy.yml'
 
 jobs:
   deploy:
