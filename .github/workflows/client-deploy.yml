@@ -1,0 +1,51 @@
+name: Deploy Client
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          cd client
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="http://rocky.legal" \
+            --build-arg BACKEND_INTERNAL_URL="http://host.docker.internal:4000" \
+            -t saga8521/nyayaai-client:latest .
+
+      - name: Save Docker Image to Tar
+        run: docker save saga8521/nyayaai-client:latest -o client.tar
+
+      - name: Copy Tar to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "client.tar"
+          target: "~/"
+
+      - name: Load and Run on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            docker load -i ~/client.tar
+            rm ~/client.tar
+            docker rm -f nyayaai-client || true
+            docker run -d \
+              --name nyayaai-client \
+              --restart always \
+              -p 3000:3000 \
+              -e PORT=3000 \
+              saga8521/nyayaai-client:latest

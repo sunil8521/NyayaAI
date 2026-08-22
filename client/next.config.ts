@@ -1,14 +1,17 @@
 import type { NextConfig } from "next";
 
 const backendUrl =
-  process.env.BACKEND_INTERNAL_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:4000";
+  process.env.BACKEND_INTERNAL_URL!;
 
 const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: true,
-  allowedDevOrigins: ["192.168.1.54", "localhost", "127.0.0.1"],
+  allowedDevOrigins: [
+    "rocky.legal",
+    "www.rocky.legal",
+    "localhost",
+    "127.0.0.1",
+  ],
   images: {
     remotePatterns: [
       {
