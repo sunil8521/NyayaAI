@@ -1,32 +1,50 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
 import { ChatService } from 'src/chat/chat.service';
 import { ToolsService } from './tools.service';
-
-import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
-import { StateGraph, START, END, MessagesAnnotation, MemorySaver, CompiledStateGraph } from '@langchain/langgraph';
+import { SystemMessage } from '@langchain/core/messages';
+import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
+import { StateGraph, START, MessagesAnnotation, CompiledStateGraph } from '@langchain/langgraph';
+import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 @Injectable()
 export class WorkflowService implements OnModuleInit {
   private readonly logger = new Logger(WorkflowService.name);
   private app!: CompiledStateGraph<any, any, any>;
+  private checkpointer!: MongoDBSaver;
 
-  constructor(private readonly chatService: ChatService, private readonly toolsService: ToolsService) { }
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly toolsService: ToolsService,
+    @InjectConnection() private readonly connection: Connection,
+  ) {}
 
   async onModuleInit(): Promise<void> {
+    const nativeClient = (this.connection as any).getClient();
+    const dbName = this.connection.db?.databaseName || 'okila';
+
+    this.checkpointer = new MongoDBSaver({
+      client: nativeClient as any,
+      dbName,
+    });
+
     const tools = this.toolsService.getTools();
     const llmWithTools = this.chatService.getLlm().bindTools(tools);
 
     const toolNode = new ToolNode(tools);
+
     const chatbot = async (state: typeof MessagesAnnotation.State) => {
-      const response = await llmWithTools.invoke(state.messages);
-      if (response.tool_calls && response.tool_calls.length > 0) {
-        for (const call of response.tool_calls) {
-          this.logger.log(`🤖 [LLM Decision] Tool requested: "${call.name}" with args: ${JSON.stringify(call.args)}`);
-        }
-      }
+      const systemPrompt = new SystemMessage(
+        'You are a savage, hyper-efficient Legal AI Assistant. ' +
+        'Analyze the provided legal tools, deliver short, devastatingly sharp, and brutally honest answers. ' +
+        'Do not waste words. Do not sugarcoat anything. Crush the opponent\'s logic instantly. ' +
+        'Keep answers under 3 sentences maximum. Be a legal assassin, not a lecturer.'
+      );
+
+      const response = await llmWithTools.invoke([systemPrompt, ...state.messages]);
       return { messages: [response] };
     };
-    const checkpointer = new MemorySaver();
 
     const graph = new StateGraph(MessagesAnnotation)
       .addNode('chatbot', chatbot)
@@ -35,13 +53,40 @@ export class WorkflowService implements OnModuleInit {
       .addConditionalEdges('chatbot', toolsCondition)
       .addEdge('tools', 'chatbot');
 
-    this.app = graph.compile({ checkpointer });
+    this.app = graph.compile({ checkpointer: this.checkpointer });
+    this.logger.log('✅ LangGraph Workflow with MongoDBSaver initialized successfully');
   }
 
   async executeChat(inputMessages: any[], threadId: string): Promise<any> {
-    const config = { configurable: { thread_id: "1" } };
+    const config = { configurable: { thread_id: threadId } };
     return this.app.invoke({ messages: inputMessages }, config);
   }
 
+  
 
+  async deleteThread(threadId: string): Promise<void> {
+    // 1. Call LangGraph checkpointer delete if supported
+    try {
+      if (typeof (this.checkpointer as any)?.deleteThread === 'function') {
+        await (this.checkpointer as any).deleteThread(threadId);
+      }
+    } catch (err) {
+      this.logger.warn(`Checkpointer deleteThread error: ${err}`);
+    }
+
+    // 2. Clean up from MongoDB checkpoint collections (checkpoints, checkpoint_writes, checkpoint_blobs)
+    try {
+      const db = this.connection.db;
+      if (db) {
+        await Promise.allSettled([
+          db.collection('checkpoints').deleteMany({ thread_id: threadId }),
+          db.collection('checkpoint_writes').deleteMany({ thread_id: threadId }),
+          db.collection('checkpoint_blobs').deleteMany({ thread_id: threadId }),
+        ]);
+        this.logger.log(`🧹 Cleaned up checkpoints & checkpoint_writes for thread: ${threadId}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Direct MongoDB checkpoint cleanup error: ${err}`);
+    }
+  }
 }

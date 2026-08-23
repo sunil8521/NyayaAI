@@ -6,45 +6,26 @@ import { z } from "zod";
 export class ToolsService {
     private readonly logger = new Logger(ToolsService.name);
 
-    constructor(
-        // You can inject other NestJS services here if needed
-        // private readonly emailService: EmailService 
-    ) {}
+    constructor() { }
 
     getTools(): StructuredTool[] {
-        const emailTool = tool(
-            async ({ to, subject }) => {
-                this.logger.log(`🔧 [Tool Call] send_email -> to: "${to}", subject: "${subject}"`);
-                const result = `✅ Email sent to ${to} with subject: "${subject}"`;
-                this.logger.log(`🔧 [Tool Result] send_email -> ${result}`);
+        const legalSearchTool = tool(
+            async ({ query }) => {
+                this.logger.log(`🔧 [Tool Call] search_legal_docs -> query: "${query}"`);
+
+                const result = " We are currently working on fetching the exact legal clauses from the document database. Hold tight.";
+
                 return result;
             },
             {
-                name: 'send_email',
-                description: 'Send an email to someone. Use this when the user asks to send an email.',
+                name: 'search_legal_docs',
+                description: 'Search the legal document database for evidence, contracts, laws, or legal clauses.',
                 schema: z.object({
-                    to: z.string().describe('The email address to send to'),
-                    subject: z.string().describe('The subject of the email'),
+                    query: z.string().describe('The legal query or keywords to look up in the documents'),
                 }),
             }
         );
 
-        const weatherTool = tool(
-            async ({ place }) => {
-                this.logger.log(`🔧 [Tool Call] weather -> place: "${place}"`);
-                const result = `The weather of ${place} is cool.`;
-                this.logger.log(`🔧 [Tool Result] weather -> ${result}`);
-                return result;
-            },
-            {
-                name: 'weather',
-                description: 'Get the current weather for a specific location.',
-                schema: z.object({
-                    place: z.string().describe('The city or location name'),
-                }),
-            }
-        );
-
-        return [weatherTool, emailTool];
+        return [legalSearchTool];
     }
 }

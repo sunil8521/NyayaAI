@@ -38,6 +38,11 @@ export const metadata: Metadata = {
   },
   description:
     "India's premier AI legal assistant for advocates, law firms, and legal researchers. Research Supreme Court & High Court judgments, explore Bharatiya Nyaya Sanhita (BNS), analyze case law, draft petitions, and find citations in seconds. 100% Free.",
+  icons: {
+    icon: "/fav.png",
+    shortcut: "/fav.png",
+    apple: "/fav.png",
+  },
   applicationName: "Rocky Legal",
   authors: [{ name: "Rocky Legal Team", url: siteUrl }],
   generator: "Next.js",
@@ -76,7 +81,7 @@ export const metadata: Metadata = {
         url: "/heroimg.png",
         width: 1200,
         height: 630,
-        alt: "Rocky Legal — AI Legal Assistant for Indian Advocates",
+        alt: "Rocky Legal | AI Legal Assistant for Indian Advocates",
       },
     ],
     locale: "en_IN",

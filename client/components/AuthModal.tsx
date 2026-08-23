@@ -62,20 +62,22 @@ function FormField({
   );
 }
 
-// Reusable submit button
 function SubmitButton({
   isSubmitting,
+  disabled,
   text,
   icon = <FiArrowRight className="w-4 h-4" />,
 }: {
   isSubmitting: boolean;
+  disabled?: boolean;
   text: string;
   icon?: React.ReactNode;
 }) {
+  const isDisabled = isSubmitting || disabled;
   return (
     <button
       type="submit"
-      disabled={isSubmitting}
+      disabled={isDisabled}
       className="w-full py-3.5 mt-2 bg-[#1A1614] dark:bg-[#C7A064] hover:bg-[#2A2522] dark:hover:bg-[#D4B078] text-white dark:text-[#1A1614] font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-60 cursor-pointer shadow-xs"
     >
       {isSubmitting ? (
@@ -385,14 +387,14 @@ export default function AuthModal() {
                           maxLength={10}
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                          placeholder="9876543210"
+                          placeholder="0000000000"
                           className={`${inputClass} pl-10`}
                         />
                       </div>
                     </div>
                   </FormField>
 
-                  <SubmitButton isSubmitting={isUpdatingPhone || phoneNumber.length < 10} text="Continue to Rocky Legal" />
+                  <SubmitButton isSubmitting={isUpdatingPhone} disabled={phoneNumber.length < 10} text="Continue to Rocky Legal" />
                 </form>
               </div>
             ) : authModalTab === "forgot-password" ? (
@@ -552,7 +554,7 @@ export default function AuthModal() {
                                 message: "Please enter a valid 10-digit number",
                               },
                             })}
-                            placeholder="9876543210"
+                            placeholder="0000000000"
                             className={`${inputClass} pl-10`}
                           />
                         </div>
