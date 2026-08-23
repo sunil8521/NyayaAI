@@ -99,7 +99,7 @@ export default function ChatArea({ onOpenSidebar }: ChatAreaProps) {
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-lg sm:text-xl font-normal italic">
               Rocky Legal
             </span>
-            <span className="text-[#C7A064] text-sm">✦</span>
+            
           </Link>
         </div>
 
@@ -207,7 +207,7 @@ export default function ChatArea({ onOpenSidebar }: ChatAreaProps) {
               {chatMutation.isPending && (
                 <div className="flex items-center gap-3 text-[#5A5550] dark:text-[#8A8279] animate-pulse p-4 rounded-xl bg-white/50 dark:bg-[#12100E]/50 border border-[#1A1614]/5 dark:border-[#2A2522]">
                   <div className="w-6 h-6 rounded-md bg-[#C7A064]/20 flex items-center justify-center">
-                    <span className="text-[#C7A064] text-sm">✦</span>
+                    
                   </div>
                   <span className="text-xs sm:text-sm font-medium">
                     Researching Indian case law & analyzing statutes...

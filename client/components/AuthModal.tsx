@@ -323,7 +323,7 @@ export default function AuthModal() {
               <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-xl font-normal italic">
                 Rocky Legal
               </span>
-              <span className="text-[#C7A064] text-sm">✦</span>
+              
             </div>
 
             {/* Error Banner */}

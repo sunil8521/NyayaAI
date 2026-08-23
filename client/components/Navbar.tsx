@@ -63,7 +63,7 @@ export default function Navbar() {
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-3xl font-normal italic">
               Rocky Legal
             </span>
-            <span className="text-[#C7A064] ml-1 text-xl">✦</span>
+            
           </Link>
 
           {/* Desktop Navigation */}
