@@ -18,7 +18,7 @@ const dmSerif = DM_Serif_Display({
   variable: "--font-heading",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://nyayaai.in";
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "http://rocky.legal";
 
 export const viewport: Viewport = {
   themeColor: [
@@ -33,16 +33,16 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "NyayaAI | India's First Free AI Legal Assistant for Advocates",
-    template: "%s | NyayaAI",
+    default: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
+    template: "%s | Rocky.legal",
   },
   description:
     "India's premier AI legal assistant for advocates, law firms, and legal researchers. Research Supreme Court & High Court judgments, explore Bharatiya Nyaya Sanhita (BNS), analyze case law, draft petitions, and find citations in seconds. 100% Free.",
-  applicationName: "NyayaAI",
-  authors: [{ name: "NyayaAI Team", url: siteUrl }],
+  applicationName: "Rocky.legal",
+  authors: [{ name: "Rocky.legal Team", url: siteUrl }],
   generator: "Next.js",
   keywords: [
-    "NyayaAI",
+    "Rocky.legal",
     "AI Legal Assistant India",
     "Indian Law AI",
     "Supreme Court Judgments AI",
@@ -59,24 +59,24 @@ export const metadata: Metadata = {
     "Law Firm AI Software India",
     "Indian Legal Tech",
   ],
-  creator: "NyayaAI",
-  publisher: "NyayaAI",
+  creator: "Rocky.legal",
+  publisher: "Rocky.legal",
   category: "Legal Technology",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "NyayaAI | India's First Free AI Legal Assistant for Advocates",
+    title: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
     description:
       "Instant, citation-backed legal research powered by AI. Search Supreme Court judgments, new criminal laws (BNS/BNSS/BSA), and prepare briefs with confidence.",
     url: siteUrl,
-    siteName: "NyayaAI",
+    siteName: "Rocky.legal",
     images: [
       {
         url: "/heroimg.png",
         width: 1200,
         height: 630,
-        alt: "NyayaAI — AI Legal Assistant for Indian Advocates",
+        alt: "Rocky.legal — AI Legal Assistant for Indian Advocates",
       },
     ],
     locale: "en_IN",
@@ -84,11 +84,11 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "NyayaAI | India's First Free AI Legal Assistant for Advocates",
+    title: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
     description:
       "Instant, citation-backed Indian legal research powered by AI. Free for advocates, law firms, and researchers.",
     images: ["/heroimg.png"],
-    creator: "@nyayaai",
+    creator: "@rockylegal",
   },
   robots: {
     index: true,
@@ -116,7 +116,7 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": `${siteUrl}/#website`,
       "url": siteUrl,
-      "name": "NyayaAI",
+      "name": "Rocky.legal",
       "description": "India's First Free AI Legal Assistant for Advocates and Legal Professionals",
       "publisher": {
         "@id": `${siteUrl}/#organization`,
@@ -130,19 +130,19 @@ const jsonLd = {
     {
       "@type": "Organization",
       "@id": `${siteUrl}/#organization`,
-      "name": "NyayaAI",
+      "name": "Rocky.legal",
       "url": siteUrl,
       "logo": `${siteUrl}/heroimg.png`,
       "sameAs": [
-        "https://twitter.com/nyayaai",
-        "https://www.linkedin.com/company/nyayaai",
-        "https://instagram.com/nyayaai",
+        "https://twitter.com/rockylegal",
+        "https://www.linkedin.com/company/rockylegal",
+        "https://instagram.com/rockylegal",
       ],
     },
     {
       "@type": "SoftwareApplication",
       "@id": `${siteUrl}/#software`,
-      "name": "NyayaAI",
+      "name": "Rocky.legal",
       "operatingSystem": "All",
       "applicationCategory": "LegalSoftware",
       "offers": {

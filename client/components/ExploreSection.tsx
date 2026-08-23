@@ -42,7 +42,7 @@ export default function ExploreSection() {
           }`}
         >
           <span className="font-bold">Why </span>
-          <span className="font-heading font-normal italic text-[#C7A064]">NyayaAI</span>
+          <span className="font-heading font-normal italic text-[#C7A064]">Rocky.legal</span>
           <span className="font-bold"> ?</span>
         </h2>
 

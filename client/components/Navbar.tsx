@@ -61,7 +61,7 @@ export default function Navbar() {
           >
             <GoLaw className="w-8 h-8 text-[#1A1614] dark:text-[#E8E0D4]" />
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-3xl font-normal italic">
-              NyayaAI
+              Rocky.legal
             </span>
             <span className="text-[#C7A064] ml-1 text-xl">✦</span>
           </Link>

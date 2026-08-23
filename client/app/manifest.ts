@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "NyayaAI — AI Legal Assistant for Advocates",
-    short_name: "NyayaAI",
+    name: "Rocky.legal — AI Legal Assistant for Advocates",
+    short_name: "Rocky.legal",
     description: "India's First Free AI Legal Assistant for Advocates and Legal Professionals",
     start_url: "/",
     display: "standalone",

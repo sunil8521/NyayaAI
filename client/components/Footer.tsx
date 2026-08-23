@@ -38,7 +38,7 @@ export default function Footer() {
             <Link href="/" className="inline-flex items-center gap-2 mb-6 group">
               <GoLaw className="w-8 h-8 text-[#1A1614] dark:text-[#E8E0D4]" />
               <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-3xl font-normal italic">
-                NyayaAI
+                Rocky.legal
               </span>
               <span className="text-[#C7A064] ml-1 text-xl">✦</span>
             </Link>
@@ -147,7 +147,7 @@ export default function Footer() {
       <div className="border-t border-[#1A1614]/10 dark:border-[#1A1614]">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5A5550] dark:text-[#8A8279]">
-            <p>© 2025 NyayaAI✦. All rights reserved.</p>
+            <p>© 2025 Rocky.legal✦. All rights reserved.</p>
             <p>Made with <span className="text-red-400">♥</span> in India</p>
           </div>
         </div>
