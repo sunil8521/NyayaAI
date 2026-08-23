@@ -37,7 +37,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             docker rm -f nyayaai-backend || true
-            docker rmi saga8521/nyayaai-backend:latest || true
+            docker  rmi saga8521/nyayaai-backend:latest || true
             rm -f ~/backend.tar ~/backend.tar.gz ~/*.tar.gz
             docker image prune -f
 

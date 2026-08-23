@@ -18,7 +18,7 @@ jobs:
         run: |
           cd client
           docker build \
-            --build-arg NEXT_PUBLIC_APP_URL="http://rocky.legal" \
+            --build-arg NEXT_PUBLIC_APP_URL="https://rocky.legal" \
             --build-arg BACKEND_INTERNAL_URL="http://host.docker.internal:4000" \
             -t saga8521/nyayaai-client:latest .
 
