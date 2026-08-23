@@ -41,9 +41,10 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            docker rm -f nyayaai-client || true
+            docker rmi saga8521/nyayaai-client:latest || true
             docker load -i ~/client.tar
             rm ~/client.tar
-            docker rm -f nyayaai-client || true
             docker run -d \
               --name nyayaai-client \
               --restart always \
@@ -51,3 +52,4 @@ jobs:
               -e PORT=3000 \
               --add-host=host.docker.internal:host-gateway \
               saga8521/nyayaai-client:latest
+            docker image prune -f

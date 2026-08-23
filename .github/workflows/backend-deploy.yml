@@ -38,9 +38,10 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            docker rm -f nyayaai-backend || true
+            docker rmi saga8521/nyayaai-backend:latest || true
             docker load -i ~/backend.tar
             rm ~/backend.tar
-            docker rm -f nyayaai-backend || true
             docker run -d \
               --name nyayaai-backend \
               --restart always \
@@ -55,3 +56,4 @@ jobs:
               -e GEMINI_KEY="${{ secrets.GEMINI_KEY }}" \
               -e MODEL_NAME="gemini-2.5-flash" \
               saga8521/nyayaai-backend:latest
+            docker image prune -f
