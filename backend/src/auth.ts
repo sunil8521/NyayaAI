@@ -14,6 +14,9 @@ export const auth = betterAuth({
     ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim())
     : [],
   account: {
+    // Mobile browsers often double-fire callbacks (prefetching), which consumes single-use database states.
+    // Switching to 'cookie' prevents the "verification not found" error on mobile.
+    storeStateStrategy: 'cookie',
     skipStateCookieCheck: true,
     accountLinking: {
       enabled: true,
@@ -40,6 +43,11 @@ export const auth = betterAuth({
         type: 'string',
         required: false,
       },
+    },
+  },
+  advanced: {
+    crossSubDomainCookies: {
+      enabled: true,
     },
   },
 });

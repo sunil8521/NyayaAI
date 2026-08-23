@@ -27,10 +27,10 @@ export function ModeToggle() {
       return;
     }
 
-    // Get click coordinates or fallback to button center
+    // Get exact center of the button, fallback to click coordinates or window center
     const rect = buttonRef.current?.getBoundingClientRect();
-    const x = e.clientX || (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
-    const y = e.clientY || (rect ? rect.top + rect.height / 2 : 0);
+    const x = rect ? rect.left + rect.width / 2 : e.clientX || window.innerWidth / 2;
+    const y = rect ? rect.top + rect.height / 2 : e.clientY || window.innerHeight / 2;
 
     const endRadius = Math.hypot(
       Math.max(x, window.innerWidth - x),
