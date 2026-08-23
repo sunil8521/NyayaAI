@@ -4,6 +4,8 @@ import { FiArrowRight, FiSearch } from "react-icons/fi";
 import { useUIStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
 
+import { useSession } from "@/lib/auth-client";
+
 const suggested = [
   "Decriminalisation of homosexuality",
   "Validity of triple talaq",
@@ -13,17 +15,23 @@ const suggested = [
 ];
 
 export default function HeroSection() {
-  const { searchQuery, setSearchQuery } = useUIStore();
+  const { searchQuery, setSearchQuery, openAuthModal } = useUIStore();
   const router = useRouter();
+  const { data: session } = useSession();
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      router.push(`/ask`);
+      if (!session?.user) {
+        sessionStorage.setItem("pendingQuery", searchQuery.trim());
+        openAuthModal("signin");
+      } else {
+        router.push(`/ask`);
+      }
     }
   };
 
   return (
-    <section className="relative bg-[#FAFAFA] dark:bg-[#0C0A09] min-h-screen flex items-center overflow-hidden transition-colors duration-500 pt-24 lg:pt-12 pb-16 lg:pb-12">
+    <section className="relative bg-[#FAFAFA] dark:bg-[#0C0A09] min-h-dvh flex items-center overflow-hidden transition-colors duration-500 pt-24 lg:pt-12 pb-16 lg:pb-12">
       {/* Decorative Watermark Backgrounds */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <img

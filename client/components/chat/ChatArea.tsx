@@ -66,6 +66,17 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
     setOptimisticMessages([]);
   }, [threadId]);
 
+  // Execute pending query from landing page search
+  useEffect(() => {
+    const pendingQuery = sessionStorage.getItem("pendingQuery");
+    if (pendingQuery && !threadId) {
+      sessionStorage.removeItem("pendingQuery");
+      // executeSearch requires an input state, wait, executeSearch takes a string
+      executeSearch(pendingQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId]);
+
   // Auto-scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -137,7 +148,7 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#FAFAFA] dark:bg-[#0C0A09] transition-colors duration-500 overflow-hidden">
+    <div className="flex flex-col h-dvh w-full bg-[#FAFAFA] dark:bg-[#0C0A09] transition-colors duration-500 overflow-hidden">
       {/* Top Navbar Bar */}
       <header className="flex items-center justify-between px-4 py-3 sm:px-6 border-b border-[#1A1614]/5 dark:border-[#2A2522] bg-[#FAFAFA]/80 dark:bg-[#0C0A09]/80 backdrop-blur-md shrink-0 z-10">
         <div className="flex items-center gap-3">

@@ -12,7 +12,7 @@ export default function AskContainer({ threadId }: AskContainerProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white dark:bg-[#0C0A09]">
+    <div className="flex h-dvh overflow-hidden bg-white dark:bg-[#0C0A09]">
       {/* Sidebar with dynamic chats */}
       <Sidebar
         isOpen={isSidebarOpen}  
