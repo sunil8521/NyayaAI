@@ -321,7 +321,7 @@ export default function AuthModal() {
             <div className="flex items-center gap-2 mb-6">
               <GoLaw className="w-6 h-6 text-[#1A1614] dark:text-[#E8E0D4]" />
               <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-xl font-normal italic">
-                Rocky.legal
+                Rocky Legal
               </span>
               <span className="text-[#C7A064] text-sm">✦</span>
             </div>
@@ -392,7 +392,7 @@ export default function AuthModal() {
                     </div>
                   </FormField>
 
-                  <SubmitButton isSubmitting={isUpdatingPhone || phoneNumber.length < 10} text="Continue to Rocky.legal" />
+                  <SubmitButton isSubmitting={isUpdatingPhone || phoneNumber.length < 10} text="Continue to Rocky Legal" />
                 </form>
               </div>
             ) : authModalTab === "forgot-password" ? (
@@ -474,7 +474,7 @@ export default function AuthModal() {
                   <p className="text-[#5A5550] dark:text-[#8A8279] text-sm mt-1">
                     {authModalTab === "signin"
                       ? "Continue your legal research."
-                      : "Join Rocky.legal today. It's completely free."}
+                      : "Join Rocky Legal today. It's completely free."}
                   </p>
                 </div>
 
@@ -613,7 +613,7 @@ export default function AuthModal() {
                 <p className="text-center text-[#5A5550] dark:text-[#8A8279] mt-6 text-sm">
                   {authModalTab === "signin" ? (
                     <>
-                      New to Rocky.legal?{" "}
+                      New to Rocky Legal?{" "}
                       <button
                         type="button"
                         onClick={() => setAuthModalTab("signup")}

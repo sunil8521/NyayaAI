@@ -33,16 +33,16 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
-    template: "%s | Rocky.legal",
+    default: "Rocky Legal | India's First Free AI Legal Assistant for Advocates",
+    template: "%s | Rocky Legal",
   },
   description:
     "India's premier AI legal assistant for advocates, law firms, and legal researchers. Research Supreme Court & High Court judgments, explore Bharatiya Nyaya Sanhita (BNS), analyze case law, draft petitions, and find citations in seconds. 100% Free.",
-  applicationName: "Rocky.legal",
-  authors: [{ name: "Rocky.legal Team", url: siteUrl }],
+  applicationName: "Rocky Legal",
+  authors: [{ name: "Rocky Legal Team", url: siteUrl }],
   generator: "Next.js",
   keywords: [
-    "Rocky.legal",
+    "Rocky Legal",
     "AI Legal Assistant India",
     "Indian Law AI",
     "Supreme Court Judgments AI",
@@ -59,24 +59,24 @@ export const metadata: Metadata = {
     "Law Firm AI Software India",
     "Indian Legal Tech",
   ],
-  creator: "Rocky.legal",
-  publisher: "Rocky.legal",
+  creator: "Rocky Legal",
+  publisher: "Rocky Legal",
   category: "Legal Technology",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
+    title: "Rocky Legal | India's First Free AI Legal Assistant for Advocates",
     description:
       "Instant, citation-backed legal research powered by AI. Search Supreme Court judgments, new criminal laws (BNS/BNSS/BSA), and prepare briefs with confidence.",
     url: siteUrl,
-    siteName: "Rocky.legal",
+    siteName: "Rocky Legal",
     images: [
       {
         url: "/heroimg.png",
         width: 1200,
         height: 630,
-        alt: "Rocky.legal — AI Legal Assistant for Indian Advocates",
+        alt: "Rocky Legal — AI Legal Assistant for Indian Advocates",
       },
     ],
     locale: "en_IN",
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Rocky.legal | India's First Free AI Legal Assistant for Advocates",
+    title: "Rocky Legal | India's First Free AI Legal Assistant for Advocates",
     description:
       "Instant, citation-backed Indian legal research powered by AI. Free for advocates, law firms, and researchers.",
     images: ["/heroimg.png"],
@@ -116,7 +116,7 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": `${siteUrl}/#website`,
       "url": siteUrl,
-      "name": "Rocky.legal",
+      "name": "Rocky Legal",
       "description": "India's First Free AI Legal Assistant for Advocates and Legal Professionals",
       "publisher": {
         "@id": `${siteUrl}/#organization`,
@@ -130,7 +130,7 @@ const jsonLd = {
     {
       "@type": "Organization",
       "@id": `${siteUrl}/#organization`,
-      "name": "Rocky.legal",
+      "name": "Rocky Legal",
       "url": siteUrl,
       "logo": `${siteUrl}/heroimg.png`,
       "sameAs": [
@@ -142,7 +142,7 @@ const jsonLd = {
     {
       "@type": "SoftwareApplication",
       "@id": `${siteUrl}/#software`,
-      "name": "Rocky.legal",
+      "name": "Rocky Legal",
       "operatingSystem": "All",
       "applicationCategory": "LegalSoftware",
       "offers": {

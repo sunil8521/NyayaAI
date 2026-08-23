@@ -80,7 +80,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           <Link href="/ask" className="flex items-center gap-2">
             <GoLaw className="w-6 h-6 text-[#1A1614] dark:text-[#E8E0D4]" />
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-xl font-normal italic">
-              Rocky.legal
+              Rocky Legal
             </span>
             <span className="text-[#C7A064] ml-0.5 text-base">✦</span>
           </Link>

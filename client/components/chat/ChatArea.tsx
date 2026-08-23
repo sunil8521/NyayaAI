@@ -97,7 +97,7 @@ export default function ChatArea({ onOpenSidebar }: ChatAreaProps) {
           <Link href="/" className="flex items-center gap-2">
             <GoLaw className="w-5 h-5 sm:w-6 sm:h-6 text-[#1A1614] dark:text-[#E8E0D4]" />
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-lg sm:text-xl font-normal italic">
-              Rocky.legal
+              Rocky Legal
             </span>
             <span className="text-[#C7A064] text-sm">✦</span>
           </Link>
@@ -191,7 +191,7 @@ export default function ChatArea({ onOpenSidebar }: ChatAreaProps) {
                           <GoLaw className="w-4 h-4" />
                         </div>
                         <span className="text-xs font-bold uppercase tracking-widest text-[#5A5550] dark:text-[#8A8279]">
-                          Rocky.legal Assistant
+                          Rocky Legal Assistant
                         </span>
                       </div>
 
@@ -254,7 +254,7 @@ export default function ChatArea({ onOpenSidebar }: ChatAreaProps) {
                 </button>
               </div>
               <p className="text-[10px] text-center text-[#5A5550]/60 dark:text-[#8A8279]/60 pt-2">
-                Rocky.legal Assistant for Indian Legal Research. Always verify critical statutory citations.
+                Rocky Legal Assistant for Indian Legal Research. Always verify critical statutory citations.
               </p>
             </div>
           </div>
