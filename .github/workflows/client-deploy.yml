@@ -32,6 +32,18 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Cleanup Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            docker rm -f nyayaai-client || true
+            docker rmi saga8521/nyayaai-client:latest || true
+            rm -f ~/client.tar ~/client.tar.gz ~/*.tar.gz
+            docker image prune -f
+
       - name: Copy Tar to EC2
         run: |
           scp -i ~/.ssh/id_ed25519 client.tar ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/home/ubuntu/client.tar
@@ -43,10 +55,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker rm -f nyayaai-client || true
-            docker rmi saga8521/nyayaai-client:latest || true
             docker load -i ~/client.tar
-            rm ~/client.tar
+            rm -f ~/client.tar
             docker run -d \
               --name nyayaai-client \
               --restart always \

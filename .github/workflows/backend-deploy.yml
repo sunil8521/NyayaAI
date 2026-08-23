@@ -29,6 +29,18 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Cleanup Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            docker rm -f nyayaai-backend || true
+            docker rmi saga8521/nyayaai-backend:latest || true
+            rm -f ~/backend.tar ~/backend.tar.gz ~/*.tar.gz
+            docker image prune -f
+
       - name: Copy Tar to EC2
         run: |
           scp -i ~/.ssh/id_ed25519 backend.tar ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/home/ubuntu/backend.tar
@@ -40,10 +52,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker rm -f nyayaai-backend || true
-            docker rmi saga8521/nyayaai-backend:latest || true
             docker load -i ~/backend.tar
-            rm ~/backend.tar
+            rm -f ~/backend.tar
             docker run -d \
               --name nyayaai-backend \
               --restart always \
