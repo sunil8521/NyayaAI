@@ -23,7 +23,7 @@ jobs:
             -t saga8521/nyayaai-client:latest .
 
       - name: Save Docker Image to Tar
-        run: docker save saga8521/nyayaai-client:latest -o client.tar
+        run: docker save saga8521/nyayaai-client:latest | gzip > client.tar.gz
 
       - name: Setup SSH Key
         run: |
@@ -46,7 +46,7 @@ jobs:
 
       - name: Copy Tar to EC2
         run: |
-          scp -i ~/.ssh/id_ed25519 client.tar ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/home/ubuntu/client.tar
+          scp -i ~/.ssh/id_ed25519 client.tar.gz ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/home/ubuntu/client.tar.gz
 
       - name: Load and Run on EC2
         uses: appleboy/ssh-action@master
@@ -55,8 +55,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker load -i ~/client.tar
-            rm -f ~/client.tar
+            docker load -i ~/client.tar.gz
+            rm -f ~/client.tar.gz
             docker run -d \
               --name nyayaai-client \
               --restart always \
