@@ -29,26 +29,26 @@ import { LanggraphModule } from './langgraph/langgraph.module';
     }),
 
     // BullMQ — Redis-backed job queue
-    // BullModule.forRootAsync({
-    //   imports: [ConfigModule],
-    //   inject: [ConfigService],
-    //   useFactory: (configService: ConfigService) => ({
-    //     connection: {
-    //       host: configService.get<string>('REDIS_HOST', 'localhost'),
-    //       port: 6379,
-    //       maxRetriesPerRequest: null,
-    //       retryStrategy: (times) => {
-    //         if (times > 3) {
-    //           console.error('❌ Redis connection failed. Stopping retry spam.');
-    //           return null;
-    //         }
-    //         return Math.min(times * 100, 3000);
-    //       },
-    //     },
-    //   }),
-    // }),
-    // QdrantModule,
-    // IngestionModule,
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: 6379,
+          maxRetriesPerRequest: null,
+          retryStrategy: (times) => {
+            if (times > 3) {
+              console.error('❌ Redis connection failed. Stopping retry spam.');
+              return null;
+            }
+            return Math.min(times * 100, 3000);
+          },
+        },
+      }),
+    }),
+    QdrantModule,
+    IngestionModule,
 
     // Better Auth — handles all /api/auth/* routes + global AuthGuard
     AuthModule.forRoot({
