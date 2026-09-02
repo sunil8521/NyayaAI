@@ -86,6 +86,23 @@ export default function Navbar() {
             </Link>
 
             <Link
+              href="/ingest"
+              onClick={() => setActiveNav("Ingestion")}
+              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
+                activeNav === "Ingestion"
+                  ? "text-[#C7A064]"
+                  : "text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4]"
+              }`}
+            >
+              <span>Drive Ingest</span>
+              <span
+                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${
+                  activeNav === "Ingestion" ? "w-full" : "w-0 group-hover:w-full"
+                }`}
+              />
+            </Link>
+
+            <Link
               href="#about"
               onClick={() => setActiveNav("About")}
               className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
@@ -199,6 +216,16 @@ export default function Navbar() {
             className="block py-3 text-[#1A1614]/80 dark:text-[#E8E0D4]/80 text-base hover:text-[#C7A064] dark:hover:text-[#C7A064] font-medium transition-colors"
           >
             Ask AI
+          </Link>
+          <Link
+            href="/ingest"
+            onClick={() => {
+              setActiveNav("Ingestion");
+              closeMobileMenu();
+            }}
+            className="block py-3 text-[#1A1614]/80 dark:text-[#E8E0D4]/80 text-base hover:text-[#C7A064] dark:hover:text-[#C7A064] font-medium transition-colors"
+          >
+            Drive Ingestion
           </Link>
           <Link
             href="#about"

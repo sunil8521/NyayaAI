@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-// import { BullModule } from '@nestjs/bullmq';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
-// import { QdrantModule } from './qdrant/qdrant.module';
-// import { IngestionModule } from './ingestion/ingestion.module';
+import { QdrantModule } from './qdrant/qdrant.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 import { auth } from './auth';
 import { ChatModule } from './chat/chat.module';
 import { LanggraphModule } from './langgraph/langgraph.module';
@@ -28,7 +28,6 @@ import { LanggraphModule } from './langgraph/langgraph.module';
       }),
     }),
 
-    /* ─── Disabled Redis & Qdrant for lightweight Auth-first run ───
     // BullMQ — Redis-backed job queue
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -50,7 +49,6 @@ import { LanggraphModule } from './langgraph/langgraph.module';
     }),
     QdrantModule,
     IngestionModule,
-    ─── End of Redis & Qdrant modules ─── */
 
     // Better Auth — handles all /api/auth/* routes + global AuthGuard
     AuthModule.forRoot({

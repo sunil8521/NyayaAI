@@ -42,6 +42,14 @@ const nextConfig: NextConfig = {
         source: "/api/chat",
         destination: `${backendUrl}/chat`,
       },
+      {
+        source: "/api/ingestion/:path*",
+        destination: `${backendUrl}/ingestion/:path*`,
+      },
+      {
+        source: "/api/ingestion",
+        destination: `${backendUrl}/ingestion`,
+      },
     ];
   },
 };

@@ -6,6 +6,7 @@ import { WorkflowService } from './workflow.service';
 import { ChatModule } from 'src/chat/chat.module';
 import { Chat, ChatSchema } from './schemas/chat.schema';
 import { Message, MessageSchema } from './schemas/message.schema';
+import { IngestionModule } from '../ingestion/ingestion.module';
 
 @Module({
   imports: [
@@ -14,9 +15,10 @@ import { Message, MessageSchema } from './schemas/message.schema';
       { name: Message.name, schema: MessageSchema },
     ]),
     ChatModule,
+    IngestionModule, // Provides EmbeddingService for the search tool
   ],
   controllers: [LanggraphController],
   providers: [ToolsService, WorkflowService],
   exports: [WorkflowService],
 })
-export class LanggraphModule {}
+export class LanggraphModule { }

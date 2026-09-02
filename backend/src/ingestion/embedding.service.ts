@@ -8,6 +8,10 @@ interface EmbedResponse {
   sparse: SparseVector[];
 }
 
+interface RerankResponse {
+  scores: number[];
+}
+
 @Injectable()
 export class EmbeddingService {
   private readonly baseUrl: string;
@@ -22,5 +26,14 @@ export class EmbeddingService {
   async embed(texts: string[]): Promise<EmbedResponse> {
     const { data } = await axios.post<EmbedResponse>(`${this.baseUrl}/embed`, { texts });
     return data;
+  }
+
+  /** Re-ranks documents against a query using the BGE cross-encoder for maximum accuracy. */
+  async rerank(query: string, documents: string[]): Promise<number[]> {
+    const { data } = await axios.post<RerankResponse>(`${this.baseUrl}/rerank`, {
+      query,
+      documents,
+    });
+    return data.scores;
   }
 }

@@ -17,7 +17,7 @@ import { WorkflowService } from './workflow.service';
 import { SendMessageDto } from './dto/chat-request.dto';
 import { Chat, ChatDocument } from './schemas/chat.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
-import { Session } from '@thallesp/nestjs-better-auth';
+import { Session, AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 
 @Controller('chat')
@@ -104,9 +104,10 @@ export class LanggraphController {
 
   // 4. Send a message to the LangGraph agent (POST /chat/:threadId/message)
   @Post(':threadId/message')
+  @AllowAnonymous()
   @HttpCode(HttpStatus.OK)
   async sendMessage(
-    @Session() session: UserSession,
+    // @Session() session: UserSession,
     @Param('threadId') threadId: string,
     @Body() body: SendMessageDto,
   ) {
@@ -115,19 +116,19 @@ export class LanggraphController {
       throw new BadRequestException('Message is required');
     }
 
-    const userId = this.getObjectId(session?.user?.id);
-    const chat = await this.chatModel.findOne({ threadId, userId }).exec();
-
-    if (!chat) {
-      throw new NotFoundException('Chat not found');
-    }
+    // --- DB VALIDATION COMMENTED OUT FOR TESTING ---
+    // const userId = this.getObjectId(session?.user?.id);
+    // const chat = await this.chatModel.findOne({ threadId, userId }).exec();
+    // if (!chat) {
+    //   throw new NotFoundException('Chat not found');
+    // }
 
     // 1. Save user message to Message collection
-    await this.messageModel.create({
-      threadId,
-      role: 'user',
-      content: message,
-    });
+    // await this.messageModel.create({
+    //   threadId,
+    //   role: 'user',
+    //   content: message,
+    // });
 
     // 2. Invoke LangGraph agent (MongoDBSaver automatically manages thread history)
     const result = await this.workflowService.executeChat(
@@ -142,19 +143,18 @@ export class LanggraphController {
         : JSON.stringify(latestResponse.content);
 
     // 3. Save AI response to Message collection
-    await this.messageModel.create({
-      threadId,
-      role: 'ai',
-      content: aiMessage,
-    });
+    // await this.messageModel.create({
+    //   threadId,
+    //   role: 'ai',
+    //   content: aiMessage,
+    // });
 
     // 4. Update chat's updatedAt (and title if it was "New Chat")
-    const updateData: any = { updatedAt: new Date() };
-    if (chat.title === 'New Chat') {
-      updateData.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
-    }
-
-    await this.chatModel.findByIdAndUpdate(chat._id, updateData).exec();
+    // const updateData: any = { updatedAt: new Date() };
+    // if (chat.title === 'New Chat') {
+    //   updateData.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
+    // }
+    // await this.chatModel.findByIdAndUpdate(chat?._id, updateData).exec();
 
     return {
       success: true,

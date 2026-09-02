@@ -18,7 +18,7 @@ export class WorkflowService implements OnModuleInit {
     private readonly chatService: ChatService,
     private readonly toolsService: ToolsService,
     @InjectConnection() private readonly connection: Connection,
-  ) {}
+  ) { }
 
   async onModuleInit(): Promise<void> {
     const nativeClient = (this.connection as any).getClient();
@@ -35,11 +35,9 @@ export class WorkflowService implements OnModuleInit {
     const toolNode = new ToolNode(tools);
 
     const chatbot = async (state: typeof MessagesAnnotation.State) => {
+      const now = new Date().toLocaleString();
       const systemPrompt = new SystemMessage(
-        'You are a savage, hyper-efficient Legal AI Assistant. ' +
-        'Analyze the provided legal tools, deliver short, devastatingly sharp, and brutally honest answers. ' +
-        'Do not waste words. Do not sugarcoat anything. Crush the opponent\'s logic instantly. ' +
-        'Keep answers under 3 sentences maximum. Be a legal assassin, not a lecturer.'
+        `You are a helpful assistant. The current date and time is ${now}. If the user asks anything related to Sunil, you MUST use the 'search_database' tool to find the answer. Otherwise, just answer normally without using the tool. When you use the tool, ALWAYS cite the source file name and chunk number at the end of your answer.`
       );
 
       const response = await llmWithTools.invoke([systemPrompt, ...state.messages]);
@@ -62,7 +60,7 @@ export class WorkflowService implements OnModuleInit {
     return this.app.invoke({ messages: inputMessages }, config);
   }
 
-  
+
 
   async deleteThread(threadId: string): Promise<void> {
     // 1. Call LangGraph checkpointer delete if supported
