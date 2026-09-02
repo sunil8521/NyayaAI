@@ -217,7 +217,7 @@ export default function Navbar() {
           >
             Ask AI
           </Link>
-          <Link
+          {/* <Link
             href="/ingest"
             onClick={() => {
               setActiveNav("Ingestion");
@@ -226,7 +226,7 @@ export default function Navbar() {
             className="block py-3 text-[#1A1614]/80 dark:text-[#E8E0D4]/80 text-base hover:text-[#C7A064] dark:hover:text-[#C7A064] font-medium transition-colors"
           >
             Drive Ingestion
-          </Link>
+          </Link> */}
           <Link
             href="#about"
             onClick={() => {
