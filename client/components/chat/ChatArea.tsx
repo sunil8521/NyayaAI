@@ -33,6 +33,37 @@ const suggestedSearches = [
   "Passive euthanasia and living will precedent judgments",
 ];
 
+function HighlightedText({ text, keywords }: { text: string; keywords: string[] }) {
+  if (!keywords || keywords.length === 0) return <>{text}</>;
+
+  // Filter valid words (longer than 3 chars) and escape regex characters
+  const validWords = keywords
+    .filter((w) => w.length > 3)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+  if (validWords.length === 0) return <>{text}</>;
+
+  const regex = new RegExp(`(${validWords.join("|")})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        validWords.some((w) => new RegExp(`^${w}$`, "i").test(part)) ? (
+          <mark
+            key={i}
+            className="bg-[#C7A064]/30 dark:bg-[#C7A064]/40 text-inherit rounded-sm px-0.5 font-medium transition-colors"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
+
 export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   const router = useRouter();
   const [input, setInput] = useState("");
@@ -244,8 +275,22 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                   <div className="h-20 bg-[#1A1614]/5 dark:bg-[#2A2522] rounded-2xl" />
                 </div>
               ) : (
-                allMessages.map((msg, index) =>
-                  msg.role === "user" ? (
+                allMessages.map((msg, index) => {
+                  let keywords: string[] = [];
+                  if (msg.role === "assistant" && index > 0) {
+                    // Extract keywords from the previous user message
+                    const prevUserMsg = allMessages
+                      .slice(0, index)
+                      .reverse()
+                      .find((m) => m.role === "user");
+                    if (prevUserMsg) {
+                      keywords = prevUserMsg.content
+                        .replace(/[^\w\s]/g, "")
+                        .split(/\s+/);
+                    }
+                  }
+
+                  return msg.role === "user" ? (
                     <div key={index} className="border-b border-[#1A1614]/10 dark:border-[#2A2522] pb-5">
                       <p className="text-[#C7A064] text-[11px] font-bold uppercase tracking-widest mb-2">
                         Legal Query
@@ -267,12 +312,12 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                         </div>
 
                         <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#12100E] border border-[#1A1614]/10 dark:border-[#2A2522] text-[#1A1614] dark:text-[#E8E0D4] text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-sans shadow-xs">
-                          {msg.content}
+                          <HighlightedText text={msg.content} keywords={keywords} />
                         </div>
                       </div>
                     </div>
-                  )
-                )
+                  );
+                })
               )}
 
               {/* Thinking Indicator */}
