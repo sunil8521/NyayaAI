@@ -61,8 +61,8 @@ import { LanggraphModule } from './langgraph/langgraph.module';
 
     // Active Feature modules
     UserModule,
-    // ChatModule,
-    // LanggraphModule,
+    ChatModule,
+    LanggraphModule,
   ],
   controllers: [AppController],
   providers: [AppService],
