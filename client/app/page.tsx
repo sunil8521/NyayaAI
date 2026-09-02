@@ -4,6 +4,8 @@ import ExploreSection from "@/components/ExploreSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import Footer from "@/components/Footer";
 
+export const dynamic = 'force-dynamic';
+
 export default function Home() {
   return (
     <>
