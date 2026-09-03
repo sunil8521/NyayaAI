@@ -153,7 +153,7 @@ export default function Navbar() {
                       {session.user.name ? session.user.name[0].toUpperCase() : <FiUser className="w-3.5 h-3.5" />}
                     </div>
                   )}
-                  <span className="text-sm font-medium text-[#1A1614] dark:text-[#E8E0D4] max-w-[120px] truncate">
+                  <span className="text-sm font-medium text-[#1A1614] dark:text-[#E8E0D4] max-w-30 truncate">
                     {session.user.name || session.user.email}
                   </span>
                 </div>
@@ -202,7 +202,7 @@ export default function Navbar() {
       <div
         className={`lg:hidden bg-[#FAFAFA]/95 dark:bg-[#0C0A09]/95 backdrop-blur-md border-b border-[#1A1614]/10 dark:border-[#2A2522] absolute top-full left-0 w-full shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
           isMobileMenuOpen
-            ? "max-h-[500px] opacity-100 translate-y-0 visible"
+            ? "max-h-125 opacity-100 translate-y-0 visible"
             : "max-h-0 opacity-0 -translate-y-2 invisible overflow-hidden"
         }`}
       >
@@ -227,6 +227,8 @@ export default function Navbar() {
           >
             Drive Ingestion
           </Link> */}
+
+
           <Link
             href="#about"
             onClick={() => {
