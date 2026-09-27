@@ -1,9 +1,10 @@
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
   const httpAdapterHost = app.get(HttpAdapterHost);
@@ -11,6 +12,9 @@ async function bootstrap() {
 
   // Enable graceful shutdown hooks (SIGINT, SIGTERM)
   app.enableShutdownHooks();
+
+  // Trust Nginx proxy to get real client IP from X-Forwarded-For
+  app.set('trust proxy', 1);
 
   app.enableCors({
     origin: process.env.CLIENT_ORIGIN
