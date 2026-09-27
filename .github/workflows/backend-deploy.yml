@@ -36,6 +36,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker rm -f nyayaai-backend || true
             docker  rmi saga8521/nyayaai-backend:latest || true
             rm -f ~/backend.tar ~/backend.tar.gz ~/*.tar.gz
@@ -52,6 +53,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker load -i ~/backend.tar.gz
             rm -f ~/backend.tar.gz
             docker run -d \

@@ -1,8 +1,8 @@
-# NyayaAI ⚖️✦
+# Rocky Legal ⚖️✦
 
-> **India's Premier AI Legal Assistant for Advocates, Law Firms, and Legal Researchers**
+> **Premier AI Legal Assistant and Research Platform**
 
-NyayaAI is an AI-powered legal research and assistant platform tailored specifically for the Indian legal system. It provides real-time access to Supreme Court judgments, High Court precedents, Bharatiya Nyaya Sanhita (BNS / BNSS / BSA 2023) statutes, and intelligent legal drafting.
+Rocky Legal is an AI-powered legal research and assistant platform. It provides real-time access to case law, intelligent legal drafting, and agentic workflows.
 
 ---
 
@@ -11,7 +11,7 @@ NyayaAI is an AI-powered legal research and assistant platform tailored specific
 This repository is organized as a full-stack monorepo:
 
 ```text
-NyayaAI/
+RockyLegal/
 ├── client/          # Next.js 16 (Turbopack) frontend with Tailwind CSS v4
 │   ├── app/         # App Router pages & SEO (robots, sitemap, manifest)
 │   ├── components/  # Modern, responsive UI components

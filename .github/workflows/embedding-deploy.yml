@@ -36,6 +36,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker rm -f embedding-server || true
             docker rmi saga8521/embedding-server:latest || true
             rm -f ~/embedding.tar ~/embedding.tar.gz
@@ -52,6 +53,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker load -i ~/embedding.tar.gz
             rm -f ~/embedding.tar.gz
             docker run -d \
@@ -59,5 +61,6 @@ jobs:
               --restart always \
               --network rockey-legal-network \
               -p 8000:8000 \
+              -v /home/ubuntu/cached_models:/app/model_cache \
               saga8521/embedding-server:latest
             docker image prune -f

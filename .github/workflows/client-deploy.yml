@@ -39,6 +39,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker rm -f nyayaai-client || true
             docker rmi saga8521/nyayaai-client:latest || true
             rm -f ~/client.tar ~/client.tar.gz ~/*.tar.gz
@@ -55,6 +56,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             docker load -i ~/client.tar.gz
             rm -f ~/client.tar.gz
             docker run -d \
