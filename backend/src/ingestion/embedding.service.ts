@@ -12,6 +12,12 @@ interface RerankResponse {
   scores: number[];
 }
 
+interface ClassifyResponse {
+  docType: string;
+  confidence: number;
+  scores: Record<string, number>;
+}
+
 @Injectable()
 export class EmbeddingService {
   private readonly baseUrl: string;
@@ -35,5 +41,11 @@ export class EmbeddingService {
       documents,
     });
     return data.scores;
+  }
+
+  /** Classify a document by embedding similarity against precomputed category embeddings. */
+  async classify(text: string): Promise<ClassifyResponse> {
+    const { data } = await axios.post<ClassifyResponse>(`${this.baseUrl}/classify`, { text });
+    return data;
   }
 }

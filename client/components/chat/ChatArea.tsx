@@ -1,5 +1,7 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+
 import { useState, useEffect, useRef } from "react";
 import {
   FiMenu,
@@ -7,18 +9,25 @@ import {
   FiAlertCircle,
   FiArrowUpRight,
   FiPlus,
+  FiUser,
+  FiCopy,
+  FiCheck,
+  FiFileText,
+  FiChevronDown,
+  FiDatabase,
 } from "react-icons/fi";
 import { GoLaw } from "react-icons/go";
 import {
   chatHistoryQueryOptions,
   useCreateChatMutation,
-  useSendMessageMutation,
+  useStreamMessage,
 } from "@/lib/queries/chat";
 import { useQuery } from "@tanstack/react-query";
 import { ModeToggle } from "@/components/mode-toggle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ChatMessage } from "@/lib/api/chat";
+import { useSession } from "@/lib/auth-client";
 
 interface ChatAreaProps {
   threadId?: string;
@@ -26,75 +35,64 @@ interface ChatAreaProps {
 }
 
 const suggestedSearches = [
-  "What is the weather in Delhi?",
-  "Please send an email to client@lawfirm.com with subject Case Status",
-  "Decriminalisation of homosexuality under IPC Section 377",
-  "Validity of triple talaq and key Supreme Court guidelines",
-  "Passive euthanasia and living will precedent judgments",
+  "Was there any horizontal overlap between Tata Chemicals and Wyoming 1?",
+  "Did the ultimate control over IVRCL AHL change after the proposed combination?",
+  "Which two companies were involved in combination C-2011/10/07?",
+  "How many companies were involved in the Akzo Nobel amalgamation?",
+  "Did the CCI impose penalty proceedings against GS Mace Holdings Ltd?",
 ];
 
-function HighlightedText({ text, keywords }: { text: string; keywords: string[] }) {
-  if (!keywords || keywords.length === 0) return <>{text}</>;
-
-  // Filter valid words (longer than 3 chars) and escape regex characters
-  const validWords = keywords
-    .filter((w) => w.length > 3)
-    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-
-  if (validWords.length === 0) return <>{text}</>;
-
-  const regex = new RegExp(`(${validWords.join("|")})`, "gi");
-  const parts = text.split(regex);
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        validWords.some((w) => new RegExp(`^${w}$`, "i").test(part)) ? (
-          <mark
-            key={i}
-            className="bg-[#C7A064]/30 dark:bg-[#C7A064]/40 text-inherit rounded-sm px-0.5 font-medium transition-colors"
-          >
-            {part}
-          </mark>
-        ) : (
-          part
-        )
-      )}
-    </>
-  );
-}
+// Removed HighlightedText as per user feedback to rely on LLM markdown rendering
 
 export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   const router = useRouter();
-  const [input, setInput] = useState("");
-  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { data: session } = useSession();
 
-  // Fetch real chat history if threadId is provided
-  const { data: serverMessages = [], isLoading: isLoadingHistory } = useQuery(
-    chatHistoryQueryOptions(threadId)
-  );
+  const adminEmailsStr = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
+  const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
+  const isAdmin = session?.user?.email && adminEmails.includes(session.user.email.toLowerCase());
+
+  const [input, setInput] = useState("");
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isExecutingRef = useRef(false);
+
+  const handleCopy = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => {
+      setCopiedIndex((prev) => (prev === index ? null : prev));
+    }, 2000);
+  };
 
   const createChatMutation = useCreateChatMutation();
-  const sendMessageMutation = useSendMessageMutation();
+  const { send: streamSend, isStreaming: isStreamingMessage, error: streamError } = useStreamMessage();
 
-  // Combine server messages with any optimistic local messages
-  const allMessages: ChatMessage[] = [
-    ...serverMessages,
-    ...optimisticMessages.filter(
-      (opt) =>
-        !serverMessages.some(
-          (srv) => srv.content === opt.content && srv.role === opt.role
-        )
-    ),
-  ];
+  // Fetch real chat history if threadId is provided.
+  // CRITICAL: Disable all automatic refetching while streaming to prevent duplicates.
+  // The optimistic cache is the source of truth during a stream.
+  const { data: serverMessages = [], isLoading: isLoadingHistory } = useQuery({
+    ...chatHistoryQueryOptions(threadId),
+    staleTime: isStreamingMessage ? Infinity : 30_000,
+    refetchOnWindowFocus: !isStreamingMessage,
+    refetchOnReconnect: !isStreamingMessage,
+  });
+
+  // When inside a thread, serverMessages has all messages including optimistic ones from onMutate!
+  // When on /ask, show pendingPrompt while the new thread is being initialized.
+  const allMessages: ChatMessage[] = threadId
+    ? serverMessages
+    : pendingPrompt
+      ? [{ role: "user", content: pendingPrompt }]
+      : [];
 
   const hasMessages = allMessages.length > 0 || !!threadId;
-  const isGenerating = createChatMutation.isPending || sendMessageMutation.isPending;
+  const isGenerating = createChatMutation.isPending || isStreamingMessage;
 
-  // Clear optimistic messages when switching thread
+  // Clear pending prompt on thread change
   useEffect(() => {
-    setOptimisticMessages([]);
+    setPendingPrompt(null);
   }, [threadId]);
 
   // Execute pending query from landing page search
@@ -102,7 +100,6 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
     const pendingQuery = sessionStorage.getItem("pendingQuery");
     if (pendingQuery && !threadId) {
       sessionStorage.removeItem("pendingQuery");
-      // executeSearch requires an input state, wait, executeSearch takes a string
       executeSearch(pendingQuery);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,17 +111,16 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   }, [allMessages, isGenerating]);
 
   const executeSearch = async (query: string) => {
-    if (!query.trim() || isGenerating) return;
+    if (!query.trim() || isGenerating || isExecutingRef.current) return;
 
+    isExecutingRef.current = true;
     const userText = query.trim();
     setInput("");
 
-    // Optimistically show user message
-    setOptimisticMessages((prev) => [...prev, { role: "user", content: userText }]);
-
     try {
       if (!threadId) {
-        // 1. On /ask (New Chat) -> Create thread first
+        // 1. On /ask (New Chat) -> Show query immediately and create thread
+        setPendingPrompt(userText);
         const createRes = await createChatMutation.mutateAsync();
         const newThreadId = createRes.threadId;
 
@@ -132,41 +128,21 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
           // 2. Change URL to /ask/c/:threadId
           router.push(`/ask/c/${newThreadId}`);
 
-          // 3. Send message in the background
-          sendMessageMutation.mutate(
-            { threadId: newThreadId, message: userText },
-            {
-              onSuccess: (data) => {
-                setOptimisticMessages((prev) => [
-                  ...prev,
-                  { role: "ai", content: data.message },
-                ]);
-              },
-            }
-          );
+          // 3. Send message — will optimistically append the user message to cache and stream response
+          streamSend(newThreadId, userText);
         }
       } else {
-        // Already inside a specific thread -> Send directly
-        sendMessageMutation.mutate(
-          { threadId, message: userText },
-          {
-            onSuccess: (data) => {
-              setOptimisticMessages((prev) => [
-                ...prev,
-                { role: "ai", content: data.message },
-              ]);
-            },
-          }
-        );
+        // Already inside a thread -> optimistically append user message immediately to cache and stream!
+        streamSend(threadId, userText);
       }
     } catch (err: any) {
-      setOptimisticMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          content: `❌ Error: ${err.message || "Failed to communicate with AI"}`,
-        },
-      ]);
+      console.error("Failed to execute search:", err);
+      setPendingPrompt(null);
+    } finally {
+      // Release the execution lock after a short debounce to prevent double clicks
+      setTimeout(() => {
+        isExecutingRef.current = false;
+      }, 300);
     }
   };
 
@@ -200,6 +176,16 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link
+              href="/internal/ingestion"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#C7A064]/10 dark:bg-[#C7A064]/20 text-[#C7A064] hover:bg-[#C7A064]/20 dark:hover:bg-[#C7A064]/30 border border-[#C7A064]/30 transition-colors cursor-pointer"
+              title="Drive Ingest"
+            >
+              <FiDatabase className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Drive Ingest</span>
+            </Link>
+          )}
           {hasMessages && (
             <button
               onClick={handleNewChat}
@@ -219,14 +205,19 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
           {/* Centered Search Input Box */}
           <div className="w-full relative mb-10 sm:mb-14">
             <div className="relative border-b-2 border-[#1A1614]/15 dark:border-white/15 transition-colors focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] pb-2 sm:pb-3">
-              <input
-                type="text"
+              <textarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Search judgments or ask legal questions..."
-                className="w-full bg-transparent py-2 sm:py-3 pr-12 text-[#1A1614] dark:text-[#E8E0D4] text-base sm:text-xl lg:text-2xl placeholder:text-[#5A5550]/60 dark:placeholder:text-[#8A8279]/60 focus:outline-none font-sans font-normal not-italic tracking-normal"
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                }}
+                rows={1}
+                placeholder="Ask a legal question..."
+                className="w-full bg-transparent py-2 sm:py-3 pr-12 text-[#1A1614] dark:text-[#E8E0D4] text-base sm:text-xl lg:text-2xl placeholder:text-[#5A5550]/60 dark:placeholder:text-[#8A8279]/60 focus:outline-none font-sans font-normal not-italic tracking-normal resize-none overflow-y-auto scrollbar-thin [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#1A1614]/20 dark:[&::-webkit-scrollbar-thumb]:bg-[#E8E0D4]/20 [&::-webkit-scrollbar-thumb]:rounded-full"
+                style={{ minHeight: '44px' }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();
                   }
@@ -235,7 +226,7 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isGenerating}
-                className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 text-[#5A5550] dark:text-[#8A8279] hover:text-[#C7A064] dark:hover:text-[#C7A064] disabled:opacity-20 transition-colors cursor-pointer"
+                className="absolute right-0 bottom-1 sm:bottom-2 p-2.5 text-[#5A5550] dark:text-[#8A8279] hover:text-[#C7A064] dark:hover:text-[#C7A064] disabled:opacity-20 transition-colors cursor-pointer"
                 aria-label="Send query"
               >
                 <FiSend className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -276,67 +267,106 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                 </div>
               ) : (
                 allMessages.map((msg, index) => {
-                  let keywords: string[] = [];
-                  if (msg.role === "assistant" && index > 0) {
-                    // Extract keywords from the previous user message
-                    const prevUserMsg = allMessages
-                      .slice(0, index)
-                      .reverse()
-                      .find((m) => m.role === "user");
-                    if (prevUserMsg) {
-                      keywords = prevUserMsg.content
-                        .replace(/[^\w\s]/g, "")
-                        .split(/\s+/);
-                    }
-                  }
-
                   return msg.role === "user" ? (
-                    <div key={index} className="border-b border-[#1A1614]/10 dark:border-[#2A2522] pb-5">
-                      <p className="text-[#C7A064] text-[11px] font-bold uppercase tracking-widest mb-2">
-                        Legal Query
-                      </p>
-                      <p className="text-base sm:text-xl font-semibold text-[#1A1614] dark:text-[#E8E0D4] font-sans not-italic leading-relaxed">
-                        {msg.content}
-                      </p>
+                    <div
+                      key={index}
+                      className="flex justify-end animate-in slide-in-from-bottom-2 fade-in duration-300"
+                    >
+                      <div className="max-w-[88%] sm:max-w-[78%] px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl rounded-tr-xs bg-[#F4ECE1] dark:bg-[#1A1714] text-[#1A1614] dark:text-[#F3EDE2] border border-[#E0D5C3] dark:border-[#332A22] shadow-xs">
+                        <p className="text-sm sm:text-base font-normal leading-relaxed whitespace-pre-wrap font-sans">
+                          {msg.content}
+                        </p>
+                      </div>
                     </div>
                   ) : (
-                    <div key={index} className="relative">
-                      <div className="space-y-4 animate-in slide-in-from-bottom-2 fade-in duration-500">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-[#1A1614] dark:bg-[#C7A064] text-white dark:text-[#1A1614] flex items-center justify-center shadow-xs">
-                            <GoLaw className="w-4 h-4" />
+                    <div key={index} className="relative group">
+                      <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in duration-500">
+                        {/* Assistant Header Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <GoLaw className="w-4 h-4 text-[#1A1614] dark:text-white shrink-0" />
+                            <span className="text-xs font-bold uppercase tracking-widest text-[#1A1614] dark:text-white">
+                              Rocky Legal
+                            </span>
                           </div>
-                          <span className="text-xs font-bold uppercase tracking-widest text-[#5A5550] dark:text-[#8A8279]">
-                            Rocky Legal Assistant
-                          </span>
+
+                          <button
+                            onClick={() => handleCopy(msg.content, index)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-white hover:bg-[#1A1614]/5 dark:hover:bg-[#2A2522] rounded-md transition-all cursor-pointer"
+                            title="Copy response"
+                          >
+                            {copiedIndex === index ? (
+                              <>
+                                <FiCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                <span className="text-[11px] font-medium text-emerald-500">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <FiCopy className="w-3.5 h-3.5" />
+                                <span className="text-[11px] font-medium hidden sm:inline">Copy</span>
+                              </>
+                            )}
+                          </button>
                         </div>
 
-                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#12100E] border border-[#1A1614]/10 dark:border-[#2A2522] text-[#1A1614] dark:text-[#E8E0D4] text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-sans shadow-xs">
-                          <HighlightedText text={msg.content} keywords={keywords} />
+                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#12100E] border border-[#1A1614]/10 dark:border-[#26211D] text-[#1A1614] dark:text-[#E8E0D4] text-sm sm:text-base leading-relaxed font-sans shadow-xs [&>p]:mb-2 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-2 [&>h3]:font-bold [&>h3]:text-lg [&>h3]:mb-2 [&>h1]:font-bold [&>h1]:text-xl [&>h2]:font-bold [&>h2]:text-lg [&>blockquote]:border-l-4 [&>blockquote]:border-[#C7A064] [&>blockquote]:pl-4 [&>blockquote]:italic [&>strong]:font-bold [&>strong]:text-[#C7A064]">
+                          {msg.content ? (
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          ) : isGenerating ? (
+                            <div className="flex items-center gap-3 text-[#5A5550] dark:text-[#8A8279] py-1">
+                            
+                              <span className="text-sm font-medium animate-pulse">
+                                Searching legal documents...
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
+
+                        {/* Sources Section */} 
+                        {msg.sources && msg.sources.length > 0 && (
+                          <div className="mt-2 animate-in fade-in duration-500">
+                            <details className="group border border-[#1A1614]/10 dark:border-[#26211D] rounded-xl overflow-hidden bg-white/50 dark:bg-[#12100E]/50">
+                              <summary className="flex items-center gap-2 p-3 text-xs sm:text-sm font-semibold text-[#5A5550] dark:text-[#8A8279] cursor-pointer hover:bg-[#1A1614]/5 dark:hover:bg-white/5 transition-colors select-none">
+                                <FiFileText className="w-4 h-4 text-[#C7A064]" />
+                                <span>Sources ({msg.sources.length})</span>
+                                <FiChevronDown className="w-4 h-4 ml-auto transition-transform group-open:rotate-180" />
+                              </summary>
+                              <div className="p-3 border-t border-[#1A1614]/5 dark:border-[#26211D] space-y-3 bg-white/30 dark:bg-transparent">
+                                {msg.sources.map((src, i) => (
+                                  <div key={i} className="flex gap-3 text-sm">
+                                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#1A1614]/5 dark:bg-white/10 flex items-center justify-center text-xs font-bold text-[#C7A064]">
+                                      {i + 1}
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                      <div className="font-semibold text-[#1A1614] dark:text-[#E8E0D4] break-all">
+                                        {src.fileName}
+                                      </div>
+                                      <div className="text-xs text-[#5A5550] dark:text-[#8A8279]">
+                                        Page {src.pageStart === src.pageEnd ? src.pageStart : `${src.pageStart}-${src.pageEnd}`} • Chunk {src.chunkIndex}
+                                      </div>
+                                      {src.excerpt && (
+                                        <div className="text-xs italic text-[#5A5550] dark:text-[#8A8279] mt-1 border-l-2 border-[#C7A064] pl-2">
+                                          "{src.excerpt.trim()}..."
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })
               )}
 
-              {/* Thinking Indicator */}
-              {isGenerating && (
-                <div className="flex items-center gap-3 text-[#5A5550] dark:text-[#8A8279] animate-pulse p-4 rounded-xl bg-white/50 dark:bg-[#12100E]/50 border border-[#1A1614]/5 dark:border-[#2A2522]">
-                  <div className="w-6 h-6 rounded-md bg-[#C7A064]/20 flex items-center justify-center">
-                    <GoLaw className="w-4 h-4 text-[#C7A064]" />
-                  </div>
-                  <span className="text-xs sm:text-sm font-medium">
-                    Researching Indian case law & analyzing statutes...
-                  </span>
-                </div>
-              )}
-
               {/* Error Notice */}
-              {sendMessageMutation.isError && (
+              {streamError && (
                 <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs sm:text-sm flex items-center gap-3">
                   <FiAlertCircle className="w-5 h-5 shrink-0" />
-                  <span>{sendMessageMutation.error.message}</span>
+                  <span>{streamError}</span>
                 </div>
               )}
 
@@ -347,16 +377,21 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
           {/* Floating Sticky Input Bar at Bottom */}
           <div className="p-3 sm:p-4 bg-linear-to-t from-[#FAFAFA] via-[#FAFAFA] to-transparent dark:from-[#0C0A09] dark:via-[#0C0A09] dark:to-transparent border-t border-[#1A1614]/5 dark:border-[#2A2522]/40 shrink-0">
             <div className="max-w-3xl mx-auto">
-              <div className="relative bg-white dark:bg-[#141210] border border-[#1A1614]/15 dark:border-[#2A2522] shadow-md rounded-2xl sm:rounded-full px-4 py-2 sm:py-2.5 flex items-center gap-3 transition-all focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] focus-within:ring-2 focus-within:ring-[#C7A064]/15">
-                <input
-                  type="text"
+              <div className="relative bg-white dark:bg-[#141210] border border-[#1A1614]/15 dark:border-[#2A2522] shadow-md rounded-2xl sm:rounded-3xl px-4 py-2 sm:py-2.5 flex items-end gap-3 transition-all focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] focus-within:ring-2 focus-within:ring-[#C7A064]/15">
+                <textarea
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask a follow-up question or continue legal research..."
-                  className="w-full bg-transparent outline-none text-[#1A1614] dark:text-[#E8E0D4] text-sm sm:text-base placeholder:text-[#5A5550]/60 dark:placeholder:text-[#8A8279]/60 font-sans not-italic"
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+                  }}
+                  rows={1}
+                  placeholder="Message Rocky Legal..."
+                  className="w-full bg-transparent outline-none text-[#1A1614] dark:text-[#E8E0D4] text-sm sm:text-base placeholder:text-[#5A5550]/60 dark:placeholder:text-[#8A8279]/60 font-sans not-italic resize-none overflow-y-auto py-1 sm:py-1.5 scrollbar-thin [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#1A1614]/20 dark:[&::-webkit-scrollbar-thumb]:bg-[#E8E0D4]/20 [&::-webkit-scrollbar-thumb]:rounded-full"
+                  style={{ minHeight: '36px' }}
                   disabled={isGenerating}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       handleSend();
                     }
@@ -365,7 +400,7 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() || isGenerating}
-                  className="px-4 py-2 bg-[#1A1614] dark:bg-[#C7A064] text-white dark:text-[#1A1614] font-semibold text-xs sm:text-sm rounded-xl sm:rounded-full hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-[#1A1614] dark:bg-[#C7A064] text-white dark:text-[#1A1614] font-semibold text-xs sm:text-sm rounded-xl sm:rounded-full hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs mb-0.5"
                   aria-label="Send message"
                 >
                   <span className="hidden sm:inline">Ask AI</span>

@@ -15,6 +15,18 @@ export class Message {
 
   @Prop({ required: true })
   content: string;
+
+  /** Source citations from RAG retrieval (only on AI messages) */
+  @Prop({ type: [Object] })
+  sources?: Array<{
+    fileName: string;
+    pageStart: number;
+    pageEnd: number;
+    chunkIndex: number;
+    docType?: string;
+    jurisdiction?: string;
+    excerpt?: string;
+  }>;
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);

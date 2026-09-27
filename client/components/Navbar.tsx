@@ -45,11 +45,10 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
           ? "bg-[#FAFAFA]/90 dark:bg-[#0C0A09]/90 backdrop-blur-md shadow-sm dark:shadow-white/5 border-b border-[#1A1614]/5 dark:border-white/5"
           : "bg-transparent border-b border-transparent"
-      }`}
+        }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 transition-all">
@@ -63,7 +62,7 @@ export default function Navbar() {
             <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-3xl font-normal italic">
               Rocky Legal
             </span>
-            
+
           </Link>
 
           {/* Desktop Navigation */}
@@ -71,68 +70,47 @@ export default function Navbar() {
             <Link
               href="/ask"
               onClick={handleAskAIClick}
-              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
-                activeNav === "Ask AI"
+              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${activeNav === "Ask AI"
                   ? "text-[#C7A064]"
                   : "text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4]"
-              }`}
+                }`}
             >
               <span>Ask AI</span>
               <span
-                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${
-                  activeNav === "Ask AI" ? "w-full" : "w-0 group-hover:w-full"
-                }`}
+                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${activeNav === "Ask AI" ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
               />
             </Link>
 
-            <Link
-              href="/ingest"
-              onClick={() => setActiveNav("Ingestion")}
-              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
-                activeNav === "Ingestion"
-                  ? "text-[#C7A064]"
-                  : "text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4]"
-              }`}
-            >
-              <span>Drive Ingest</span>
-              <span
-                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${
-                  activeNav === "Ingestion" ? "w-full" : "w-0 group-hover:w-full"
-                }`}
-              />
-            </Link>
+
 
             <Link
               href="#about"
               onClick={() => setActiveNav("About")}
-              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
-                activeNav === "About"
+              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${activeNav === "About"
                   ? "text-[#C7A064]"
                   : "text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4]"
-              }`}
+                }`}
             >
               <span>About</span>
               <span
-                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${
-                  activeNav === "About" ? "w-full" : "w-0 group-hover:w-full"
-                }`}
+                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${activeNav === "About" ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
               />
             </Link>
 
             <Link
               href="#features"
               onClick={() => setActiveNav("Features")}
-              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${
-                activeNav === "Features"
+              className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${activeNav === "Features"
                   ? "text-[#C7A064]"
                   : "text-[#5A5550] dark:text-[#8A8279] hover:text-[#1A1614] dark:hover:text-[#E8E0D4]"
-              }`}
+                }`}
             >
               <span>Features</span>
               <span
-                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${
-                  activeNav === "Features" ? "w-full" : "w-0 group-hover:w-full"
-                }`}
+                className={`absolute -bottom-1 left-0 h-0.5 bg-[#C7A064] rounded-full transition-all duration-300 ${activeNav === "Features" ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
               />
             </Link>
 
@@ -200,11 +178,10 @@ export default function Navbar() {
 
       {/* Mobile Slide-down Navigation Menu */}
       <div
-        className={`lg:hidden bg-[#FAFAFA]/95 dark:bg-[#0C0A09]/95 backdrop-blur-md border-b border-[#1A1614]/10 dark:border-[#2A2522] absolute top-full left-0 w-full shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
-          isMobileMenuOpen
+        className={`lg:hidden bg-[#FAFAFA]/95 dark:bg-[#0C0A09]/95 backdrop-blur-md border-b border-[#1A1614]/10 dark:border-[#2A2522] absolute top-full left-0 w-full shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${isMobileMenuOpen
             ? "max-h-125 opacity-100 translate-y-0 visible"
             : "max-h-0 opacity-0 -translate-y-2 invisible overflow-hidden"
-        }`}
+          }`}
       >
         <div className="px-6 py-5 space-y-2 border-t border-[#1A1614]/5 dark:border-white/5">
           <Link

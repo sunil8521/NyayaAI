@@ -21,11 +21,11 @@ export class IngDoc {
 
   @Prop({
     required: true,
-    enum: ['queued', 'processing', 'completed', 'failed', 'deleted'],
-    default: 'queued',
+    enum: ['new', 'queued', 'processing', 'completed', 'failed', 'deleted'],
+    default: 'new',
     index: true,
   })
-  status: 'queued' | 'processing' | 'completed' | 'failed' | 'deleted';
+  status: 'new' | 'queued' | 'processing' | 'completed' | 'failed' | 'deleted';
 
   @Prop()
   error?: string;
@@ -41,14 +41,18 @@ export class IngDoc {
   @Prop({ default: 0 })
   attemptCount: number;
 
-  @Prop({ default: 'general_legal' })
-  docType: string;
+  @Prop()
+  docType?: string;
 
-  @Prop({ default: 'All_India_Generic' })
-  jurisdiction: string;
+  @Prop()
+  jurisdiction?: string;
 
   @Prop()
   fileSizeBytes?: number;
+
+  /** The Drive folder path where this file lives (e.g. /Judgments/2026) */
+  @Prop()
+  folderPath?: string;
 
   /** Google Drive's last-modified timestamp — used to detect file updates */
   @Prop()
@@ -59,6 +63,15 @@ export class IngDoc {
 
   @Prop()
   failedAt?: Date;
+
+  @Prop({ index: true })
+  deletedAt?: Date;
 }
 
 export const IngDocSchema = SchemaFactory.createForClass(IngDoc);
+
+// ⚡ Production indexes for sub-20ms dashboard queries
+IngDocSchema.index({ status: 1, driveModifiedTime: -1 }); // Dashboard sort by status + recency
+IngDocSchema.index({ status: 1, deletedAt: -1 });          // Deleted tab queries
+IngDocSchema.index({ driveFileId: 1 }, { unique: true, sparse: true }); // Drive sync dedup
+IngDocSchema.index({ fileName: 'text' });                   // Full-text search

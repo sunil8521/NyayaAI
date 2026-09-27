@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Job } from 'bullmq';
@@ -7,6 +7,8 @@ import { createHash } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { existsSync } from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { PDFParse } from 'pdf-parse';
 import { GoogleDriveService } from './google-drive.service';
 import { EmbeddingService } from './embedding.service';
@@ -31,7 +33,21 @@ function batchArray<T>(array: T[], size: number): T[][] {
   );
 }
 
-@Processor('document-ingestion', { concurrency: 2 })
+/** PDF magic bytes: %PDF- (hex: 25 50 44 46 2D) */
+const PDF_MAGIC = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D]);
+
+/** Max file size: 100 MB — reject anything larger to prevent OOM */
+const MAX_PDF_SIZE = 100 * 1024 * 1024;
+
+/** Timeout for OCR per page in milliseconds (30s per page) */
+const OCR_PAGE_TIMEOUT_MS = 30_000;
+
+@Processor('document-ingestion', {
+  concurrency: 2,
+  lockDuration: 300000,     // 5 min lock — heavy PDFs can block the event loop
+  stalledInterval: 60000,   // Check for stalled jobs every 60s
+  maxStalledCount: 2,       // Allow 2 stalls before marking as failed
+})
 export class IngestionProcessor extends WorkerHost {
   private readonly logger = new Logger(IngestionProcessor.name);
 
@@ -45,22 +61,185 @@ export class IngestionProcessor extends WorkerHost {
   }
 
   /**
-   * Extracts text from a PDF buffer.
+   * Safety net: runs once when the NestJS server starts.
+   * If the server previously crashed while BullMQ was processing,
+   * BullMQ's stalledInterval handles retrying the *job*, but MongoDB
+   * might still have a stale 'processing' status. This catches those zombies.
+   */
+  async onModuleInit() {
+    const result = await this.ingDocModel.updateMany(
+      { status: 'processing' },
+      {
+        $set: {
+          status: 'failed',
+          error: 'Server restarted while processing — ready for retry',
+          failedAt: new Date()
+        }
+      }
+    );
+    if (result.modifiedCount > 0) {
+      this.logger.warn(`🧟 Recovered ${result.modifiedCount} zombie documents from 'processing' → 'failed'`);
+    }
+  }
+
+  private readonly execFileAsync = promisify(execFile);
+
+  /**
+   * Validates that a buffer is a real PDF by checking magic bytes.
+   * Also enforces max file size to prevent OOM on huge files.
+   */
+  private validatePdf(buf: Buffer, fileName: string): void {
+    if (buf.length < 5) {
+      throw new Error(`File "${fileName}" is too small (${buf.length} bytes) — not a valid PDF`);
+    }
+    if (buf.length > MAX_PDF_SIZE) {
+      throw new Error(
+        `File "${fileName}" is ${(buf.length / 1024 / 1024).toFixed(1)} MB — exceeds ${MAX_PDF_SIZE / 1024 / 1024} MB limit`,
+      );
+    }
+    const header = buf.subarray(0, 5);
+    if (!header.equals(PDF_MAGIC)) {
+      const hexHeader = header.toString('hex');
+      throw new Error(
+        `File "${fileName}" is not a valid PDF (magic bytes: ${hexHeader}, expected: ${PDF_MAGIC.toString('hex')})`,
+      );
+    }
+  }
+
+  /**
+   * Extracts text from a PDF, using a two-tier strategy:
+   *  1. pdftotext (Poppler) — fast, handles native text-layer PDFs
+   *  2. Tesseract OCR fallback — handles scanned/image-based PDFs
+   *
    * Returns both the full concatenated text and per-page text for page-level citations.
    */
   private async extractText(
     pdfBuffer: Buffer,
+    pdfFilePath?: string,
   ): Promise<{ fullText: string; pages: PageText[] }> {
-    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
-    const result = await parser.getText();
-    await parser.destroy();
+    // We need a file on disk for CLI tools
+    const diskPath = pdfFilePath && existsSync(pdfFilePath)
+      ? pdfFilePath
+      : path.join('/tmp', `extract-${Date.now()}.pdf`);
+    const createdTmp = diskPath !== pdfFilePath;
+    if (createdTmp) {
+      await fs.writeFile(diskPath, pdfBuffer);
+    }
 
-    const pages: PageText[] = (result.pages ?? []).map((p: any) => ({
-      pageNum: p.num,
-      text: p.text,
-    }));
+    try {
+      // ── TIER 1: pdftotext (native text layer) ────────────────────
+      const pdfTextResult = await this.extractWithPdftotext(diskPath);
+      if (pdfTextResult.fullText.trim().length > 50) {
+        this.logger.log(`📝 Text extracted via pdftotext (${pdfTextResult.pages.length} pages)`);
+        return pdfTextResult;
+      }
 
-    return { fullText: result.text, pages };
+      // ── TIER 2: Tesseract OCR (scanned/image PDFs) ───────────────
+      this.logger.log(`🔍 pdftotext found no text — falling back to Tesseract OCR...`);
+      const ocrResult = await this.extractWithOcr(diskPath);
+      if (ocrResult.fullText.trim().length > 10) {
+        this.logger.log(`🔍 OCR extracted text from ${ocrResult.pages.length} pages`);
+        return ocrResult;
+      }
+
+      // ── TIER 3: pdf-parse fallback (last resort) ─────────────────
+      this.logger.warn(`⚠️ OCR also failed — trying pdf-parse as last resort`);
+      const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
+      const result = await parser.getText();
+      await parser.destroy();
+      const pages: PageText[] = (result.pages ?? []).map((p: any) => ({
+        pageNum: p.num,
+        text: p.text,
+      }));
+      return { fullText: result.text, pages };
+    } finally {
+      if (createdTmp && existsSync(diskPath)) {
+        await fs.unlink(diskPath).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Extracts text using Poppler's pdftotext CLI.
+   * Splits on form-feed (\f) characters to get per-page text.
+   */
+  private async extractWithPdftotext(
+    pdfPath: string,
+  ): Promise<{ fullText: string; pages: PageText[] }> {
+    try {
+      const { stdout } = await this.execFileAsync('pdftotext', [pdfPath, '-']);
+      const pageStrings = stdout.split('\f');
+      const pages: PageText[] = [];
+      let fullText = '';
+
+      for (let i = 0; i < pageStrings.length; i++) {
+        const pageText = pageStrings[i].trim();
+        if (pageText) {
+          pages.push({ pageNum: i + 1, text: pageText });
+          fullText += pageText + '\n\n';
+        }
+      }
+
+      return { fullText: fullText.trim(), pages };
+    } catch (err) {
+      this.logger.warn(`pdftotext failed: ${err}`);
+      return { fullText: '', pages: [] };
+    }
+  }
+
+  /**
+   * Extracts text from scanned/image PDFs using:
+   *  1. pdftoppm — converts PDF pages to PNG images (300 DPI)
+   *  2. tesseract — runs OCR on each page image
+   */
+  private async extractWithOcr(
+    pdfPath: string,
+  ): Promise<{ fullText: string; pages: PageText[] }> {
+    const ocrDir = path.join('/tmp', `ocr-${Date.now()}`);
+    await fs.mkdir(ocrDir, { recursive: true });
+
+    try {
+      // Convert PDF pages to PNG images at 300 DPI
+      await this.execFileAsync('pdftoppm', [
+        '-png', '-r', '300', pdfPath, path.join(ocrDir, 'page'),
+      ]);
+
+      // Find all generated page images, sorted by page number
+      const files = await fs.readdir(ocrDir);
+      const pageFiles = files
+        .filter(f => f.startsWith('page-') && f.endsWith('.png'))
+        .sort();
+
+      if (pageFiles.length === 0) {
+        this.logger.warn('pdftoppm produced no images');
+        return { fullText: '', pages: [] };
+      }
+
+      const pages: PageText[] = [];
+      let fullText = '';
+
+      // OCR each page image
+      for (let i = 0; i < pageFiles.length; i++) {
+        const imgPath = path.join(ocrDir, pageFiles[i]);
+        try {
+          const { stdout } = await this.execFileAsync('tesseract', [
+            imgPath, 'stdout', '-l', 'eng', '--psm', '6',
+          ]);
+          const pageText = stdout.trim();
+          if (pageText) {
+            pages.push({ pageNum: i + 1, text: pageText });
+            fullText += pageText + '\n\n';
+          }
+        } catch (ocrErr) {
+          this.logger.warn(`OCR failed for page ${i + 1}: ${ocrErr}`);
+        }
+      }
+
+      return { fullText: fullText.trim(), pages };
+    } finally {
+      // Clean up temp images
+      await fs.rm(ocrDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   /**
@@ -110,15 +289,16 @@ export class IngestionProcessor extends WorkerHost {
       combined.includes('nclat') ||
       combined.includes('nclt') ||
       combined.includes('national company law') ||
-      combined.includes('itat') ||
+      /\bitat\b/.test(combined) ||
       combined.includes('income tax appellate') ||
       combined.includes('debt recovery') ||
-      combined.includes('drt') ||
-      combined.includes('drat') ||
+      /\bdrt\b/.test(combined) ||
+      /\bdrat\b/.test(combined) ||
       combined.includes('national green tribunal') ||
-      combined.includes('ngt') ||
-      combined.includes('rera') ||
+      /\bngt\b/.test(combined) ||
+      /\brera\b/.test(combined) ||
       combined.includes('competition commission') ||
+      /\bcci\b/.test(combined) ||
       combined.includes('cestat') ||
       combined.includes('aptel') ||
       combined.includes('tdsat')
@@ -217,7 +397,7 @@ export class IngestionProcessor extends WorkerHost {
       combined.includes('hon\'ble supreme court') ||
       combined.includes('honble supreme court') ||
       combined.includes('supreme_court') ||
-      combined.includes('sci')
+      /\bsci\b/.test(combined)
     )
       return 'Supreme_Court_of_India';
 
@@ -226,17 +406,17 @@ export class IngestionProcessor extends WorkerHost {
       return 'NCLAT';
     if (combined.includes('nclt') || combined.includes('national company law tribunal'))
       return 'NCLT';
-    if (combined.includes('itat') || combined.includes('income tax appellate tribunal'))
+    if (/\bitat\b/.test(combined) || combined.includes('income tax appellate tribunal'))
       return 'ITAT';
-    if (combined.includes('drat') || combined.includes('debts recovery appellate tribunal'))
+    if (/\bdrat\b/.test(combined) || combined.includes('debts recovery appellate tribunal'))
       return 'DRAT';
-    if (combined.includes('drt') || combined.includes('debts recovery tribunal'))
+    if (/\bdrt\b/.test(combined) || combined.includes('debts recovery tribunal'))
       return 'DRT';
-    if (combined.includes('national green tribunal') || combined.includes('ngt'))
+    if (combined.includes('national green tribunal') || /\bngt\b/.test(combined))
       return 'National_Green_Tribunal';
-    if (combined.includes('rera') || combined.includes('real estate regulatory'))
+    if (/\brera\b/.test(combined) || combined.includes('real estate regulatory'))
       return 'RERA';
-    if (combined.includes('competition commission of india') || combined.includes('cci'))
+    if (combined.includes('competition commission of india') || /\bcci\b/.test(combined))
       return 'Competition_Commission_of_India';
     if (combined.includes('cestat') || combined.includes('customs excise and service tax'))
       return 'CESTAT';
@@ -307,13 +487,10 @@ export class IngestionProcessor extends WorkerHost {
       { status: 'processing', $inc: { attemptCount: 1 } },
     );
 
-    // ── STEP 0: Clean retry — delete any old Qdrant chunks for this doc ─
-    try {
-      await this.qdrantService.deleteByDocumentId(documentId);
-      this.logger.log(`🧹 Cleared old Qdrant chunks for documentId=${documentId}`);
-    } catch (e: any) {
-      this.logger.warn(`Could not clear old chunks (may not exist): ${e.message}`);
-    }
+    // ── STEP 0: Idempotent retry — deterministic IDs mean upserts overwrite,
+    //    so we do NOT delete old chunks. If the worker crashed at 80% last time,
+    //    those 80% are already safely in Qdrant. We just re-upsert everything.
+    //    This makes large document processing resumable and crash-safe.
 
     // Temp file path used only for Drive downloads
     const tempPath = path.join('/tmp', `ingest-${job.id ?? Date.now()}.pdf`);
@@ -323,21 +500,30 @@ export class IngestionProcessor extends WorkerHost {
     try {
       // ── STEP 1: Get the PDF buffer ──────────────────────────────
       let buf: Buffer;
+      let diskPath: string | undefined;
+
       if (source === 'drive' && driveFileId) {
         await this.driveService.streamPdfToDisk(driveFileId, tempPath);
         buf = await fs.readFile(tempPath);
+        diskPath = tempPath;
       } else if (filePath) {
         buf = await fs.readFile(filePath);
+        diskPath = filePath;
       } else {
         buf = Buffer.from(fileBuffer ?? '', 'base64');
       }
 
-      const extracted = await this.extractText(buf);
+      // ── STEP 1.5: Validate PDF magic bytes + size ───────────────
+      this.validatePdf(buf, fileName);
+      this.logger.log(`📋 Validated PDF: ${(buf.length / 1024).toFixed(1)} KB`);
+
+      const extracted = await this.extractText(buf, diskPath);
       extractedText = extracted.fullText;
       pages = extracted.pages;
+      this.logger.debug(`RAW EXTRACTED TEXT (first 500 chars):\n${extractedText.substring(0, 500)}`);
 
       // ── STEP 2: Chunk (with page tracking) ─────────────────────
-      const chunks = chunkText(extractedText, pages);
+      const chunks = chunkText(extractedText, pages, fileName);
       if (chunks.length === 0) {
         this.logger.warn(`No extractable text in "${fileName}" — skipping`);
         await this.ingDocModel.updateOne(
@@ -366,8 +552,28 @@ export class IngestionProcessor extends WorkerHost {
       }
 
       // ── STEP 4: Build Qdrant points with deterministic IDs + page metadata ─
-      const docType = this.inferDocType(fileName, extractedText);
+      let docType = this.inferDocType(fileName, extractedText);
       const jurisdiction = this.inferJurisdiction(fileName, extractedText);
+
+      // Fallback: if rules returned 'general_legal', try embedding-based classification
+      if (docType === 'general_legal') {
+        try {
+          const textSample = extractedText.slice(0, 4000);
+          const classification = await this.embeddingService.classify(textSample);
+          if (classification.confidence >= 0.6) {
+            this.logger.log(
+              `🤖 [Classifier] Rule-based → general_legal, embedding → ${classification.docType} (${(classification.confidence * 100).toFixed(1)}%)`,
+            );
+            docType = classification.docType;
+          } else {
+            this.logger.log(
+              `🤖 [Classifier] Low confidence (${(classification.confidence * 100).toFixed(1)}%), keeping general_legal`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(`⚠️ Embedding classifier failed, keeping general_legal: ${err}`);
+        }
+      }
 
       const points: LegalChunkPoint[] = chunks.map((chunk, i) => ({
         id: this.deterministicPointId(documentId, chunk.index),
@@ -380,6 +586,7 @@ export class IngestionProcessor extends WorkerHost {
           chunkIndex: chunk.index,
           pageStart: chunk.pageStart,
           pageEnd: chunk.pageEnd,
+          section: chunk.section,
           docType,
           jurisdiction,
           uploadedAt: new Date().toISOString().split('T')[0],

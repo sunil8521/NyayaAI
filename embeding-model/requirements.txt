@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+FlagEmbedding
+torch
+pytesseract
+pdf2image

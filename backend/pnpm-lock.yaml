@@ -68,6 +68,9 @@ importers:
       mongoose:
         specifier: ^9.9.3
         version: 9.9.3
+      nodemailer:
+        specifier: ^10.0.10
+        version: 10.0.10
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
@@ -111,6 +114,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@types/nodemailer':
+        specifier: ^8.0.2
+        version: 8.0.2
       '@types/pdf-parse':
         specifier: ^1.1.5
         version: 1.1.5
@@ -1207,6 +1213,9 @@ packages:
 
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+
+  '@types/nodemailer@8.0.2':
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
 
   '@types/pdf-parse@1.1.5':
     resolution: {integrity: sha512-kBfrSXsloMnUJOKi25s3+hRmkycHfLK6A09eRGqF/N8BkQoPUmaCr+q8Cli5FnfohEz/rsv82zAiPz/LXtOGhA==}
@@ -3099,6 +3108,10 @@ packages:
   node-releases@2.0.53:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -5066,6 +5079,10 @@ snapshots:
   '@types/node@24.13.3':
     dependencies:
       undici-types: 7.18.2
+
+  '@types/nodemailer@8.0.2':
+    dependencies:
+      '@types/node': 24.13.3
 
   '@types/pdf-parse@1.1.5':
     dependencies:
@@ -7074,6 +7091,8 @@ snapshots:
   node-int64@0.4.0: {}
 
   node-releases@2.0.53: {}
+
+  nodemailer@10.0.10: {}
 
   normalize-path@3.0.0: {}
 

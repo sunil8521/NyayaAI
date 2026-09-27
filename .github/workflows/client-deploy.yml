@@ -19,7 +19,7 @@ jobs:
           cd client
           docker build \
             --build-arg NEXT_PUBLIC_APP_URL="https://rocky.legal" \
-            --build-arg BACKEND_INTERNAL_URL="http://host.docker.internal:4000" \
+            --build-arg NEXT_PUBLIC_ADMIN_EMAILS="sunilmaharana.0x@gmail.com" \
             -t saga8521/nyayaai-client:latest .
 
       - name: Save Docker Image to Tar
@@ -60,8 +60,8 @@ jobs:
             docker run -d \
               --name nyayaai-client \
               --restart always \
+              --network rockey-legal-network \
               -p 3000:3000 \
-              -e PORT=3000 \
-              --add-host=host.docker.internal:host-gateway \
+              --env-file /home/ubuntu/.env.client \
               saga8521/nyayaai-client:latest
             docker image prune -f

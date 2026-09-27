@@ -25,9 +25,31 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  // 3. Protect internal ingestion dashboard
+  if (pathname.startsWith("/internal/ingestion")) {
+    if (!sessionToken) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    const adminEmailsStr = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
+    const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
+
+    return fetch(new URL("/api/auth/get-session", request.url).toString(), {
+      headers: { cookie: request.headers.get("cookie") || "" },
+    })
+      .then((res) => res.json())
+      .then((sessionData) => {
+        if (!sessionData?.user || !adminEmails.includes(sessionData.user.email.toLowerCase())) {
+          return NextResponse.redirect(new URL("/", request.url));
+        }
+        return NextResponse.next();
+      })
+      .catch(() => NextResponse.redirect(new URL("/", request.url)));
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/", "/ask/:path*", "/ask", "/login", "/signup"],
+  matcher: ["/", "/ask/:path*", "/ask", "/login", "/signup", "/internal/ingestion/:path*"],
 };

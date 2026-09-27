@@ -27,6 +27,9 @@ ENV PORT=4000
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
 
+# Install OCR system dependencies for production
+RUN apk add --no-cache tesseract-ocr poppler-utils
+
 # Enable pnpm for production install
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN pnpm config set ignore-scripts true

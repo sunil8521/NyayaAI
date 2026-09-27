@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -15,10 +16,16 @@ import { Model } from 'mongoose';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { GoogleDriveService } from './google-drive.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { IngDoc, IngDocDocument } from './schemas/ingested-document.schema';
+import { DriveSyncWorker } from './drive-sync.worker';
+
+/** Shared BullMQ job options: 3 retries with exponential backoff (5s → 25s → 125s) */
+const JOB_RETRY_OPTS = {
+  attempts: 3,
+  backoff: { type: 'exponential' as const, delay: 5000 },
+};
 
 @Controller('ingestion')
 export class IngestionController {
@@ -27,14 +34,14 @@ export class IngestionController {
     @InjectModel(IngDoc.name) private readonly ingDocModel: Model<IngDocDocument>,
     private readonly driveService: GoogleDriveService,
     private readonly qdrantService: QdrantService,
-  ) {}
+    private readonly driveSyncWorker: DriveSyncWorker,
+  ) { }
 
   /**
    * Manual PDF upload — writes file to /tmp and passes the path
    * into BullMQ instead of stuffing the raw base64 into Redis RAM.
    */
   @Post('upload')
-  @AllowAnonymous() 
   @UseInterceptors(FileInterceptor('file'))
   async uploadPdf(@UploadedFile() file: Express.Multer.File) {
     const documentId = randomUUID();
@@ -61,75 +68,205 @@ export class IngestionController {
         filePath: tmpPath,
         documentId,
       },
-      { jobId },
+      { jobId, ...JOB_RETRY_OPTS },
     );
 
     return { queued: true, jobId, documentId };
   }
 
   /**
-   * Preview all PDFs in Drive and compare with MongoDB database.
-   * Shows which files are New, Completed, Processing, or Failed.
+   * Preview all synced files from MongoDB (NO live Google Drive calls).
+   * Supports pagination, server-side status filtering, and text search.
+   *
+   * After the production refactor, this reads exclusively from MongoDB.
+   * Files appear here only after clicking "Load File" (trigger-sync).
    */
   @Get('drive-preview')
-  @AllowAnonymous()
-  async previewDrive() {
-    // 1. Fetch all PDFs across all subfolders in Drive
-    const driveFiles = await this.driveService.listAllPdfsRecursively();
+  async previewDrive(
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+    @Query('status') statusFilter?: string,
+    @Query('search') search?: string,
+  ) {
+    const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(limitStr || '50', 10) || 50));
+    const offset = (page - 1) * limit;
 
-    // 2. Fetch all existing documents from MongoDB
-    const existingDocs = await this.ingDocModel.find().lean();
-
-    // Build lookup by driveFileId (for Drive-sourced docs)
-    const driveFileMap = new Map<string, any>();
-    for (const d of existingDocs) {
-      if (d.driveFileId) driveFileMap.set(d.driveFileId, d);
+    // Build the query filter
+    const query: Record<string, any> = { status: { $ne: 'deleted' } };
+    if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter === 'processing') {
+        query.status = { $in: ['processing', 'queued'] };
+      } else {
+        query.status = statusFilter;
+      }
+    }
+    if (search && search.trim()) {
+      query.fileName = { $regex: search.trim(), $options: 'i' };
     }
 
-    // 3. Match Drive files with database records
-    const files = driveFiles.map((df) => {
-      const existing = driveFileMap.get(df.id);
-      return {
-        id: df.id,
-        documentId: existing?.documentId,
-        fileName: df.name,
-        folderPath: df.folderPath,
-        fileSizeBytes: df.fileSizeBytes,
-        modifiedTime: df.modifiedTime,
-        status: existing ? existing.status : 'new',
-        chunkCount: existing ? existing.chunkCount : 0,
-        processedChunks: existing?.processedChunks ?? 0,
-        attemptCount: existing?.attemptCount ?? 0,
-        docType: existing ? existing.docType : undefined,
-        jurisdiction: existing ? existing.jurisdiction : undefined,
-        error: existing ? existing.error : undefined,
-      };
-    });
-
-    const summary = {
-      totalDriveFiles: files.length,
-      newFiles: files.filter((f) => f.status === 'new').length,
-      completed: files.filter((f) => f.status === 'completed').length,
-      processing: files.filter((f) => f.status === 'processing').length,
-      queued: files.filter((f) => f.status === 'queued').length,
-      failed: files.filter((f) => f.status === 'failed').length,
+    // Status sort priority: new → processing → queued → failed → completed
+    const statusPriority: Record<string, number> = {
+      new: 0, processing: 1, queued: 2, failed: 3, completed: 4,
     };
 
-    return { summary, files };
+    // Execute all queries in parallel for maximum speed
+    const [files, total, summaryCounts] = await Promise.all([
+      // 1. Paginated find with index-backed sort
+      this.ingDocModel
+        .find(query)
+        .sort({ status: 1, driveModifiedTime: -1 })
+        .skip(offset)
+        .limit(limit)
+        .lean(),
+
+      // 2. Total for pagination
+      this.ingDocModel.countDocuments(query),
+
+      // 3. Fast status breakdown for KPI cards
+      this.ingDocModel.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    // Map aggregation result to clean summary object
+    const summary = summaryCounts.reduce(
+      (acc, curr) => {
+        acc[curr._id] = curr.count;
+        return acc;
+      },
+      { new: 0, queued: 0, processing: 0, completed: 0, failed: 0, deleted: 0 } as Record<string, number>,
+    );
+
+    const totalPages = Math.ceil(total / limit);
+
+    // Map MongoDB docs to the frontend-expected shape
+    const mappedFiles = files.map((doc: any) => ({
+      id: doc.driveFileId || doc.documentId,
+      documentId: doc.documentId,
+      fileName: doc.fileName,
+      folderPath: doc.folderPath || '/',
+      fileSizeBytes: doc.fileSizeBytes,
+      modifiedTime: doc.driveModifiedTime
+        ? new Date(doc.driveModifiedTime).toISOString()
+        : undefined,
+      status: doc.status,
+      chunkCount: doc.chunkCount || 0,
+      processedChunks: doc.processedChunks || 0,
+      attemptCount: doc.attemptCount || 0,
+      docType: doc.docType,
+      jurisdiction: doc.jurisdiction,
+      error: doc.error,
+    }));
+
+    return {
+      summary: {
+        totalDriveFiles: (summary.new || 0) + (summary.queued || 0) + (summary.processing || 0) +
+          (summary.completed || 0) + (summary.failed || 0),
+        newFiles: summary.new || 0,
+        completed: summary.completed || 0,
+        processing: summary.processing || 0,
+        queued: summary.queued || 0,
+        failed: summary.failed || 0,
+        deleted: summary.deleted || 0,
+      },
+      files: mappedFiles,
+      pagination: { page, limit, total, totalPages },
+    };
   }
 
   /**
-   * Triggers a Drive folder sync.
-   * If body contains { fileIds: ['driveId1', 'driveId2'] }, only those files are queued.
-   * Otherwise, all new PDFs across all subfolders are queued.
-   *
-   * Key change: documentId = UUID (not driveFileId). driveFileId is stored separately.
+   * Manually trigger a Drive → MongoDB background sync.
+   * RESUMABLE: If a previous sync crashed, this picks up from the saved bookmark.
+   * Returns immediately — the sync runs in the background.
+   * Frontend polls /ingestion/sync-state for real-time progress.
    */
+  @Post('trigger-sync')
+  async triggerSync() {
+    return this.driveSyncWorker.startSync();
+  }
+
+  /**
+   * Force a completely fresh scan — clears all bookmarks and starts from page 1.
+   * Use this when you want to catch newly added files that the bookmark might skip.
+   */
+  @Post('fresh-sync')
+  async freshSync() {
+    return this.driveSyncWorker.startFreshSync();
+  }
+
+  /** Returns current sync state for the frontend progress banner. */
+  @Get('sync-state')
+  async getSyncState() {
+    const state = await this.driveSyncWorker.getSyncState();
+    return {
+      ...state,
+      hasBookmark:
+        ((state as any).folderQueue?.length > 0) ||
+        (state as any).currentFolder != null,
+    };
+  }
+
+  /**
+   * Dedicated endpoint to fetch soft-deleted documents on demand.
+   * Called lazily ONLY when the user opens the "Marked Deleted" tab.
+   */
+  @Get('deleted-documents')
+  async getDeletedDocuments(
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+    @Query('search') search?: string,
+  ) {
+    const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(limitStr || '50', 10) || 50));
+
+    const filter: any = { status: 'deleted' };
+    if (search && search.trim()) {
+      filter.fileName = { $regex: search.trim(), $options: 'i' };
+    }
+
+    const [total, docs] = await Promise.all([
+      this.ingDocModel.countDocuments(filter),
+      this.ingDocModel
+        .find(filter)
+        .sort({ deletedAt: -1, updatedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    const files = docs.map((d) => ({
+      id: d.driveFileId || d.documentId,
+      documentId: d.documentId,
+      fileName: d.fileName,
+      folderPath: '/',
+      fileSizeBytes: d.fileSizeBytes,
+      modifiedTime: d.driveModifiedTime ? new Date(d.driveModifiedTime).toISOString() : undefined,
+      status: 'deleted' as const,
+      chunkCount: d.chunkCount,
+      processedChunks: d.processedChunks,
+      attemptCount: d.attemptCount,
+      docType: d.docType,
+      jurisdiction: d.jurisdiction,
+      error: d.error,
+      deletedAt: d.deletedAt ? new Date(d.deletedAt).toISOString() : undefined,
+    }));
+
+    return {
+      files,
+      pagination: { page, limit, total, totalPages },
+    };
+  }
+
+
   @Post('sync')
-  @AllowAnonymous()
   async syncFromDrive(@Body() body?: { fileIds?: string[] }) {
+    // syncDeletions is now called separately via its own "Sync with Drive" button
+
     const existingDocs = await this.ingDocModel
-      .find({ source: 'drive' }, { driveFileId: 1, documentId: 1, status: 1 })
+      .find({ source: 'drive' }, { driveFileId: 1, documentId: 1, status: 1, fileName: 1 })
       .lean();
 
     // Map: driveFileId → MongoDB doc (for lookup)
@@ -141,7 +278,7 @@ export class IngestionController {
     // Set of driveFileIds that are already completed/processing/queued (skip them)
     const completedOrActiveIds = new Set<string>(
       existingDocs
-        .filter((d) => d.status !== 'failed' && d.status !== 'deleted')
+        .filter((d) => d.status !== 'new' && d.status !== 'failed' && d.status !== 'deleted')
         .map((d) => d.driveFileId)
         .filter(Boolean) as string[],
     );
@@ -149,13 +286,21 @@ export class IngestionController {
     let filesToQueue: { id: string; name: string }[] = [];
 
     if (body?.fileIds && body.fileIds.length > 0) {
-      // Selective sync — queue specific files (even if they were previously completed)
-      const requestedSet = new Set(body.fileIds);
-      const allFiles = await this.driveService.listAllPdfsRecursively();
-      filesToQueue = allFiles.filter((f) => requestedSet.has(f.id));
+      // Selective sync — queue specific files from MongoDB (no Drive API call needed)
+      const requestedDocs = await this.ingDocModel
+        .find({ driveFileId: { $in: body.fileIds } }, { driveFileId: 1, fileName: 1, documentId: 1 })
+        .lean();
+      filesToQueue = requestedDocs
+        .filter((d) => d.driveFileId)
+        .map((d) => ({ id: d.driveFileId!, name: d.fileName }));
     } else {
-      // Full sync — only new files
-      filesToQueue = await this.driveService.listNewPdfs(completedOrActiveIds);
+      // Full sync — only new files (files in MongoDB with status 'new')
+      const newDocs = await this.ingDocModel
+        .find({ source: 'drive', status: 'new' }, { driveFileId: 1, fileName: 1 })
+        .lean();
+      filesToQueue = newDocs
+        .filter((d) => d.driveFileId)
+        .map((d) => ({ id: d.driveFileId!, name: d.fileName }));
     }
 
     for (const file of filesToQueue) {
@@ -174,6 +319,9 @@ export class IngestionController {
               status: 'queued',
               error: null,
               processedChunks: 0,
+            },
+            $unset: {
+              deletedAt: 1,
             },
           },
         );
@@ -197,7 +345,7 @@ export class IngestionController {
           fileName: file.name,
           documentId,
         },
-        { jobId: `drive-${documentId}-${Date.now()}` },
+        { jobId: `drive-${documentId}-${Date.now()}`, ...JOB_RETRY_OPTS },
       );
     }
 
@@ -209,7 +357,6 @@ export class IngestionController {
    * Qdrant cleanup happens inside the processor (Step 0).
    */
   @Post('retry-failed')
-  @AllowAnonymous()
   async retryFailed() {
     const failedDocs = await this.ingDocModel.find({ status: 'failed' }).lean();
 
@@ -227,7 +374,7 @@ export class IngestionController {
           fileName: doc.fileName,
           documentId: doc.documentId,
         },
-        { jobId: `retry-${doc.documentId}-${Date.now()}` },
+        { jobId: `retry-${doc.documentId}-${Date.now()}`, ...JOB_RETRY_OPTS },
       );
     }
 
@@ -238,8 +385,7 @@ export class IngestionController {
    * Detect PDFs deleted from Google Drive and soft-delete them.
    * Sets status='deleted' in MongoDB and removes their chunks from Qdrant.
    */
-  @Post('sync-deletions')
-  @AllowAnonymous()
+  @Post('sync-deletions')  //fetch doument form db what is not in drive 
   async syncDeletions() {
     // 1. Get all drive-sourced docs that are NOT already deleted
     const driveDocs = await this.ingDocModel
@@ -271,7 +417,7 @@ export class IngestionController {
       // Mark as deleted in MongoDB (soft delete — keep the record)
       await this.ingDocModel.updateOne(
         { documentId: doc.documentId },
-        { status: 'deleted', error: 'File removed from Google Drive' },
+        { status: 'deleted', error: 'File removed from Google Drive', deletedAt: new Date() },
       );
     }
 
@@ -287,7 +433,6 @@ export class IngestionController {
 
   /** High-level ingestion dashboard summary */
   @Get('dashboard')
-  @AllowAnonymous()
   async getDashboard() {
     const [total, completed, failed, processing, queued, deleted] = await Promise.all([
       this.ingDocModel.countDocuments(),
@@ -312,7 +457,6 @@ export class IngestionController {
 
   /** Check the ingestion status of a document by its documentId. */
   @Get('status/:documentId')
-  @AllowAnonymous()
   async getStatus(@Param('documentId') documentId: string) {
     const doc = await this.ingDocModel.findOne({ documentId }).lean();
 
@@ -336,6 +480,7 @@ export class IngestionController {
       createdAt: (doc as any).createdAt,
       completedAt: doc.completedAt,
       failedAt: doc.failedAt,
+      deletedAt: doc.deletedAt,
     };
   }
 }

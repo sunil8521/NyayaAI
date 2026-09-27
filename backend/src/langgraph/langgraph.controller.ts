@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -17,6 +18,7 @@ import { WorkflowService } from './workflow.service';
 import { SendMessageDto } from './dto/chat-request.dto';
 import { Chat, ChatDocument } from './schemas/chat.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
+import { RagLog, RagLogDocument } from './schemas/rag-log.schema';
 import { Session, AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 
@@ -26,6 +28,7 @@ export class LanggraphController {
     private readonly workflowService: WorkflowService,
     @InjectModel(Chat.name) private readonly chatModel: Model<ChatDocument>,
     @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
+    @InjectModel(RagLog.name) private readonly ragLogModel: Model<RagLogDocument>,
   ) {}
 
   private getObjectId(id: string): Types.ObjectId {
@@ -98,16 +101,17 @@ export class LanggraphController {
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
+        ...((m as any).sources?.length ? { sources: (m as any).sources } : {}),
       })),
     };
   }
 
-  // 4. Send a message to the LangGraph agent (POST /chat/:threadId/message)
+  // 4. Send a message to the LangGraph agent (POST /chat/:threadId/message) — NON-STREAMING FALLBACK
   @Post(':threadId/message')
   @AllowAnonymous()
   @HttpCode(HttpStatus.OK)
   async sendMessage(
-    // @Session() session: UserSession,
+    @Session() session: UserSession,
     @Param('threadId') threadId: string,
     @Body() body: SendMessageDto,
   ) {
@@ -116,19 +120,18 @@ export class LanggraphController {
       throw new BadRequestException('Message is required');
     }
 
-    // --- DB VALIDATION COMMENTED OUT FOR TESTING ---
-    // const userId = this.getObjectId(session?.user?.id);
-    // const chat = await this.chatModel.findOne({ threadId, userId }).exec();
-    // if (!chat) {
-    //   throw new NotFoundException('Chat not found');
-    // }
+    const userId = this.getObjectId(session?.user?.id);
+    const chat = await this.chatModel.findOne({ threadId, userId }).exec();
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
 
     // 1. Save user message to Message collection
-    // await this.messageModel.create({
-    //   threadId,
-    //   role: 'user',
-    //   content: message,
-    // });
+    await this.messageModel.create({
+      threadId,
+      role: 'user',
+      content: message,
+    });
 
     // 2. Invoke LangGraph agent (MongoDBSaver automatically manages thread history)
     const result = await this.workflowService.executeChat(
@@ -143,23 +146,112 @@ export class LanggraphController {
         : JSON.stringify(latestResponse.content);
 
     // 3. Save AI response to Message collection
-    // await this.messageModel.create({
-    //   threadId,
-    //   role: 'ai',
-    //   content: aiMessage,
-    // });
+    await this.messageModel.create({
+      threadId,
+      role: 'ai',
+      content: aiMessage,
+    });
 
     // 4. Update chat's updatedAt (and title if it was "New Chat")
-    // const updateData: any = { updatedAt: new Date() };
-    // if (chat.title === 'New Chat') {
-    //   updateData.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
-    // }
-    // await this.chatModel.findByIdAndUpdate(chat?._id, updateData).exec();
+    const updateData: any = { updatedAt: new Date() };
+    if (chat.title === 'New Chat') {
+      updateData.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
+    }
+    await this.chatModel.findByIdAndUpdate(chat._id, updateData).exec();
 
     return {
       success: true,
       message: aiMessage,
     };
+  }
+
+  // 4b. Stream a message via SSE (POST /chat/:threadId/stream)
+  @Post(':threadId/stream')
+  @AllowAnonymous()
+  async streamMessage(
+    @Session() session: UserSession,
+    @Param('threadId') threadId: string,
+    @Body() body: SendMessageDto,
+    @Res() res: any,
+  ) {
+    const { message } = body || {};
+    if (!message) {
+      throw new BadRequestException('Message is required');
+    }
+
+    const userId = this.getObjectId(session?.user?.id);
+    const chat = await this.chatModel.findOne({ threadId, userId }).exec();
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    // NOTE: Do NOT save the user message here. Save it AFTER streaming completes.
+    // Saving it before caused duplicate messages: the frontend adds an optimistic
+    // user message to the cache, then if React Query auto-refetches history during
+    // the long tool-call, it finds the same message in MongoDB → duplicate in UI.
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders();
+
+    let fullText = '';
+    let sources: any[] = [];
+
+    // Heartbeat: send a SSE comment every 10s to keep the connection alive.
+    // Without this, the Next.js rewrite proxy times out during the 15-30s
+    // tool execution (Qdrant + CPU reranker) when no events are flowing.
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 10_000);
+
+    try {
+      for await (const sseEvent of this.workflowService.streamChat(
+        [{ role: 'user', content: message }],
+        threadId,
+      )) {
+        res.write(`event: ${sseEvent.event}\ndata: ${sseEvent.data}\n\n`);
+
+        // Collect final data
+        if (sseEvent.event === 'done') {
+          const parsed = JSON.parse(sseEvent.data);
+          fullText = parsed.fullText;
+          sources = parsed.sources;
+        }
+      }
+    } catch (err: any) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+    } finally {
+      clearInterval(heartbeat);
+    }
+
+    // Save BOTH user message and AI response to MongoDB AFTER streaming completes.
+    // This ensures no mid-stream refetch can find a duplicate user message.
+    await this.messageModel.create({
+      threadId,
+      role: 'user',
+      content: message,
+    });
+
+    if (fullText) {
+      await this.messageModel.create({
+        threadId,
+        role: 'ai',
+        content: fullText,
+        ...(sources.length > 0 ? { sources } : {}),
+      });
+    }
+
+    // Update chat metadata
+    const updateData: any = { updatedAt: new Date() };
+    if (chat.title === 'New Chat') {
+      updateData.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
+    }
+    await this.chatModel.findByIdAndUpdate(chat._id, updateData).exec();
+
+    res.end();
   }
 
   // 5. Delete a chat thread & all its messages (DELETE /chat/:threadId)
@@ -184,6 +276,35 @@ export class LanggraphController {
     return {
       success: true,
       message: 'Chat thread, messages, and checkpoints deleted successfully',
+    };
+  }
+
+  // 6. View recent RAG logs (GET /chat/rag-logs)
+  @Get('rag-logs')
+  @AllowAnonymous()
+  async getRagLogs() {
+    const logs = await this.ragLogModel
+      .find()
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .exec();
+
+    return {
+      success: true,
+      count: logs.length,
+      logs,
+    };
+  }
+
+  // 7. Clear all RAG logs (DELETE /chat/rag-logs)
+  @Delete('rag-logs')
+  @AllowAnonymous()
+  async clearRagLogs() {
+    const result = await this.ragLogModel.deleteMany({}).exec();
+    return {
+      success: true,
+      deleted: result.deletedCount,
+      message: `Cleared ${result.deletedCount} RAG log entries`,
     };
   }
 }

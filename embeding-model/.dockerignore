@@ -1,0 +1,21 @@
+# Virtual environments
+.venv
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Model caches
+model_cache/
+.cache/
+
+# Git
+.git
+.gitignore
+
+# Environment variables
+.env
+.env.*

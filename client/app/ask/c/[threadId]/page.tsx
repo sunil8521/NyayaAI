@@ -1,7 +1,4 @@
 import type { Metadata } from "next";
-import AskContainer from "@/components/chat/AskContainer";
-
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://rocky.legal";
 
 export const metadata: Metadata = {
   title: "Legal Research Chat | Rocky Legal",
@@ -12,11 +9,8 @@ export const metadata: Metadata = {
   },
 };
 
-interface PageProps {
-  params: Promise<{ threadId: string }>;
-}
-
-export default async function ChatThreadPage({ params }: PageProps) {
-  const { threadId } = await params;
-  return <AskContainer threadId={threadId} />;
+// Page renders nothing — the layout handles all UI.
+// This page only provides SEO metadata for /ask/c/:threadId.
+export default function ChatThreadPage() {
+  return null;
 }

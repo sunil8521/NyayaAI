@@ -9,6 +9,9 @@ async function bootstrap() {
   const httpAdapterHost = app.get(HttpAdapterHost);
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
 
+  // Enable graceful shutdown hooks (SIGINT, SIGTERM)
+  app.enableShutdownHooks();
+
   app.enableCors({
     origin: process.env.CLIENT_ORIGIN
       ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim())

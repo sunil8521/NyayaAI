@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import Providers from "./providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import AuthModal from "@/components/AuthModal";
+import { Toaster } from "sonner";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -191,6 +192,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Providers>
             <AuthModal />
             {children}
+            <Toaster richColors position="bottom-right" closeButton />
           </Providers>
         </ThemeProvider>
       </body>

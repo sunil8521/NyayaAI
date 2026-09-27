@@ -6,6 +6,7 @@ import { WorkflowService } from './workflow.service';
 import { ChatModule } from 'src/chat/chat.module';
 import { Chat, ChatSchema } from './schemas/chat.schema';
 import { Message, MessageSchema } from './schemas/message.schema';
+import { RagLog, RagLogSchema } from './schemas/rag-log.schema';
 import { IngestionModule } from '../ingestion/ingestion.module';
 
 @Module({
@@ -13,6 +14,7 @@ import { IngestionModule } from '../ingestion/ingestion.module';
     MongooseModule.forFeature([
       { name: Chat.name, schema: ChatSchema },
       { name: Message.name, schema: MessageSchema },
+      { name: RagLog.name, schema: RagLogSchema },
     ]),
     ChatModule,
     IngestionModule, // Provides EmbeddingService for the search tool

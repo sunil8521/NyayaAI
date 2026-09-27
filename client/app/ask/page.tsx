@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import AskContainer from "@/components/chat/AskContainer";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL!
 
@@ -36,6 +35,8 @@ export const metadata: Metadata = {
   },
 };
 
+// Page renders nothing — the layout handles all UI.
+// This page only provides SEO metadata for /ask.
 export default function AskPage() {
-  return <AskContainer />;
+  return null;
 }

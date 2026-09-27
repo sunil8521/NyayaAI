@@ -209,6 +209,14 @@ html {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
   }
 
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
   .nav-link {
     position: relative;
     transition: color 0.2s ease;

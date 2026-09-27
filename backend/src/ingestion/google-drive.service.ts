@@ -73,6 +73,56 @@ export class GoogleDriveService {
   }
 
   /**
+   * Fetches a single page of PDFs from a specific folder using Google Drive's pageToken.
+   * Used by the background sync worker to process files in memory-efficient batches.
+   */
+  async getPdfsPage(
+    folderId: string,
+    pageSize: number,
+    pageToken?: string,
+  ): Promise<{
+    files: DrivePdfFile[];
+    folders: { id: string; name: string; parentPath: string }[];
+    nextPageToken?: string;
+  }> {
+    const res: any = await this.drive.files.list({
+      q: `'${folderId}' in parents and trashed=false`,
+      fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime)',
+      pageSize,
+      pageToken,
+    });
+
+    const items: any[] = res.data.files ?? [];
+    const files: DrivePdfFile[] = [];
+    const folders: { id: string; name: string; parentPath: string }[] = [];
+
+    for (const item of items) {
+      if (item.mimeType === 'application/pdf' && item.id) {
+        files.push({
+          id: item.id,
+          name: item.name || 'unnamed.pdf',
+          folderPath: '/', // Will be set by the worker based on traversal context
+          fileSizeBytes: item.size ? parseInt(item.size, 10) : undefined,
+          modifiedTime: item.modifiedTime,
+        });
+      } else if (item.mimeType === 'application/vnd.google-apps.folder' && item.id) {
+        folders.push({ id: item.id, name: item.name, parentPath: '' });
+      }
+    }
+
+    return {
+      files,
+      folders,
+      nextPageToken: res.data.nextPageToken,
+    };
+  }
+
+  /** Returns the configured root folder ID */
+  getRootFolderId(): string {
+    return this.folderId;
+  }
+
+  /**
    * Lists only new PDFs across all subfolders that aren't already tracked in the database.
    */
   async listNewPdfs(knownFileIds: Set<string>): Promise<DrivePdfFile[]> {
