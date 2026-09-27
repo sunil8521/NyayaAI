@@ -97,7 +97,8 @@ export class QdrantService implements OnModuleInit {
         this.logger.log(`✅ Qdrant connected, collection "${COLLECTION_NAME}" is ready.`);
       }
     } catch (error) {
-      this.logger.error(`❌ Failed to initialize Qdrant: ${error}`);
+      this.logger.error(`❌ FATAL: Failed to initialize Qdrant: ${error}. Shutting down backend!`);
+      process.exit(1);
     }
   }
 

@@ -25,6 +25,7 @@ import { LanggraphModule } from './langgraph/langgraph.module';
         onConnectionCreate: () => {
           console.log('✅ MongoDB connected successfully');
         },
+        serverSelectionTimeoutMS: 5000, // Fail fast if MongoDB is down
       }),
     }),
 
