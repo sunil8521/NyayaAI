@@ -19,9 +19,14 @@ export class GoogleDriveService {
   private readonly folderId: string;
 
   constructor(private readonly configService: ConfigService) {
+    let rawKey = this.configService.get<string>('GDRIVE_PRIVATE_KEY') || '';
+    // Strip leading/trailing quotes if they exist in the env variable
+    rawKey = rawKey.replace(/^["']|["']$/g, '');
+    const formattedKey = rawKey.replace(/\\n/g, '\n');
+
     const auth = new google.auth.JWT({
       email: this.configService.get<string>('GDRIVE_CLIENT_EMAIL'),
-      key: this.configService.get<string>('GDRIVE_PRIVATE_KEY')?.replace(/\\n/g, '\n'),
+      key: formattedKey,
       scopes: ['https://www.googleapis.com/auth/drive.readonly'],
     });
     this.drive = google.drive({ version: 'v3', auth });
