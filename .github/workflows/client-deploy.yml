@@ -1,4 +1,5 @@
 name: Deploy Client
+
 on:
   push:
     branches:
@@ -10,10 +11,12 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 1. Build image
       - name: Build Docker Image
         run: |
           cd client
@@ -22,9 +25,13 @@ jobs:
             --build-arg NEXT_PUBLIC_ADMIN_EMAILS="sunilmaharana.0x@gmail.com" \
             -t saga8521/nyayaai-client:latest .
 
-      - name: Save Docker Image to Tar
-        run: docker save saga8521/nyayaai-client:latest | gzip > client.tar.gz
+      # 2. Save image
+      - name: Save Docker Image
+        run: |
+          docker save saga8521/nyayaai-client:latest | gzip > client.tar.gz
+          ls -lh client.tar.gz
 
+      # 3. Setup SSH
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
@@ -32,6 +39,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      # 4. Remove old container/image
       - name: Cleanup Server
         uses: appleboy/ssh-action@master
         with:
@@ -40,16 +48,31 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+
+            echo "=== Removing old container ==="
             docker rm -f nyayaai-client || true
+
+            echo "=== Removing old image ==="
             docker rmi saga8521/nyayaai-client:latest || true
-            rm -f ~/client.tar ~/client.tar.gz ~/*.tar.gz
+
+            echo "=== Cleaning old tar files ==="
+            rm -f ~/client.tar
+            rm -f ~/client.tar.gz
+            rm -f ~/*.tar.gz
+
+            echo "=== Docker cleanup ==="
             docker image prune -f
 
-      - name: Copy Tar to EC2
+      # 5. Copy new image
+      - name: Copy Image to EC2
         run: |
-          scp -i ~/.ssh/id_ed25519 client.tar.gz ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/client.tar.gz
+          scp \
+            -i ~/.ssh/id_ed25519 \
+            client.tar.gz \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/client.tar.gz
 
-      - name: Load and Run on EC2
+      # 6. Load + Run + Verify
+      - name: Deploy Container
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -57,8 +80,21 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+
+            echo "=== Loading Docker image ==="
             docker load -i ~/client.tar.gz
+
+            echo "=== Removing tar ==="
             rm -f ~/client.tar.gz
+
+            echo "=== Checking Docker network ==="
+            docker network inspect rockey-legal-network >/dev/null 2>&1 || {
+              echo "ERROR: Docker network rockey-legal-network does not exist"
+              docker network ls
+              exit 1
+            }
+
+            echo "=== Starting container ==="
             docker run -d \
               --name nyayaai-client \
               --restart always \
@@ -66,4 +102,20 @@ jobs:
               -p 3000:3000 \
               --env-file ~/.env.client \
               saga8521/nyayaai-client:latest
-            docker image prune -f
+
+            echo "=== Checking container ==="
+            sleep 5
+
+            docker ps -a --filter "name=nyayaai-client"
+
+            echo "=== Container logs ==="
+            docker logs --tail 100 nyayaai-client
+
+            echo "=== Checking container is running ==="
+            if [ "$(docker inspect -f '{{.State.Running}}' nyayaai-client)" != "true" ]; then
+              echo "ERROR: Container exited!"
+              docker inspect nyayaai-client
+              exit 1
+            fi
+
+            echo "=== Deployment successful ==="
