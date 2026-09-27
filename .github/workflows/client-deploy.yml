@@ -101,7 +101,6 @@ jobs:
               --restart always \
               --network rockey-legal-network \
               -p 3000:3000 \
-              --env-file ~/.env.client \
               saga8521/nyayaai-client:latest
 
             echo "=== Checking container ==="
