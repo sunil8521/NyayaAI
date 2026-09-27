@@ -1,5 +1,5 @@
 # ── Stage 1: Build & Sync dependencies ─────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -27,7 +27,7 @@ COPY main.py ./
 # Models will be dynamically downloaded to the mounted volume at runtime.
 
 # ── Stage 2: Minimal Runtime ──────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/app/model_cache \
