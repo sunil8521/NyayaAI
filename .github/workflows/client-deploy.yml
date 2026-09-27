@@ -69,7 +69,7 @@ jobs:
           scp \
             -i ~/.ssh/id_ed25519 \
             client.tar.gz \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/client.tar.gz
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/home/ubuntu/client.tar.gz
 
       # 6. Load + Run + Verify
       - name: Deploy Container
