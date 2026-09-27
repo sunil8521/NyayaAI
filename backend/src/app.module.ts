@@ -37,6 +37,7 @@ import { LanggraphModule } from './langgraph/langgraph.module';
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: 6379,
+          family: 4, // Force IPv4 to fix Docker bridge EPIPE issues
           maxRetriesPerRequest: null,
           retryStrategy: (times) => {
             if (times > 3) {
