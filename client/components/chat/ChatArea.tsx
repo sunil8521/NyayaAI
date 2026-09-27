@@ -57,6 +57,16 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isExecutingRef = useRef(false);
+  const emptyStateTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatStateTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reset textarea height when input is cleared programmatically (e.g., after sending)
+  useEffect(() => {
+    if (input === "") {
+      if (emptyStateTextareaRef.current) emptyStateTextareaRef.current.style.height = 'auto';
+      if (chatStateTextareaRef.current) chatStateTextareaRef.current.style.height = 'auto';
+    }
+  }, [input]);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -206,6 +216,7 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
           <div className="w-full relative mb-10 sm:mb-14">
             <div className="relative border-b-2 border-[#1A1614]/15 dark:border-white/15 transition-colors focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] pb-2 sm:pb-3">
               <textarea
+                ref={emptyStateTextareaRef}
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
@@ -379,6 +390,7 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
             <div className="max-w-3xl mx-auto">
               <div className="relative bg-white dark:bg-[#141210] border border-[#1A1614]/15 dark:border-[#2A2522] shadow-md rounded-2xl sm:rounded-3xl px-4 py-2 sm:py-2.5 flex items-end gap-3 transition-all focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] focus-within:ring-2 focus-within:ring-[#C7A064]/15">
                 <textarea
+                  ref={chatStateTextareaRef}
                   value={input}
                   onChange={(e) => {
                     setInput(e.target.value);
