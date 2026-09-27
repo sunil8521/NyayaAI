@@ -41,13 +41,13 @@ export const auth = betterAuth({
       async sendVerificationOTP({ email, otp, type }) {
         let subject = "Your Verification Code";
         let message = `Your 4-digit code is: <strong>${otp}</strong>`;
-        
+
         if (type === "forget-password") {
-            subject = "Reset Your Password - Rocky Legal";
-            message = `We received a request to reset your password. Your 4-digit reset code is: <h2 style="color: #C7A064; letter-spacing: 4px;">${otp}</h2><p>This code expires in 5 minutes.</p>`;
+          subject = "Reset Your Password - Rocky Legal";
+          message = `We received a request to reset your password. Your 4-digit reset code is: <h2 style="color: #C7A064; letter-spacing: 4px;">${otp}</h2><p>This code expires in 5 minutes.</p>`;
         } else if (type === "sign-in" || type === "email-verification") {
-            subject = "Verify your Email - Rocky Legal";
-            message = `Welcome to Rocky Legal! Your 4-digit verification code is: <h2 style="color: #C7A064; letter-spacing: 4px;">${otp}</h2><p>This code expires in 5 minutes.</p>`;
+          subject = "Verify your Email - Rocky Legal";
+          message = `Welcome to Rocky Legal! Your 4-digit verification code is: <h2 style="color: #C7A064; letter-spacing: 4px;">${otp}</h2><p>This code expires in 5 minutes.</p>`;
         }
 
         await transporter.sendMail({
@@ -80,5 +80,17 @@ export const auth = betterAuth({
         required: false,
       },
     },
+  },
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === 'production',
+    crossSubDomainCookies: {
+      enabled: true,
+    },
+    defaultCrossSiteStrict: true,
+  },
+  trustedProxies: ['127.0.0.1', '172.18.0.0/16', '10.0.0.0/8'],
+  rateLimit: {
+    window: 60,
+    max: 1000,
   },
 });
