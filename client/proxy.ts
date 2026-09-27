@@ -34,25 +34,18 @@ export function proxy(request: NextRequest) {
     const adminEmailsStr = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
     const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
 
-    return fetch(new URL("/api/auth/get-session", request.url).toString(), {
+    // Fetch from localhost so it hits the Next.js server and triggers the next.config.ts rewrite to the backend
+    return fetch("http://localhost:3000/api/auth/get-session", {
       headers: { cookie: request.headers.get("cookie") || "" },
     })
       .then((res) => res.json())
       .then((sessionData) => {
-        if (!sessionData?.user) {
-          console.error("Middleware: No user found in session data", sessionData);
-          return NextResponse.redirect(new URL("/?error=no_user", request.url));
-        }
-        if (!adminEmails.includes(sessionData.user.email.toLowerCase())) {
-          console.error(`Middleware: User email ${sessionData.user.email} not in admin list:`, adminEmails);
-          return NextResponse.redirect(new URL("/?error=not_admin", request.url));
+        if (!sessionData?.user || !adminEmails.includes(sessionData.user.email.toLowerCase())) {
+          return NextResponse.redirect(new URL("/", request.url));
         }
         return NextResponse.next();
       })
-      .catch((err) => {
-        console.error("Middleware: Fetch get-session failed:", err);
-        return NextResponse.redirect(new URL("/?error=fetch_failed", request.url));
-      });
+      .catch(() => NextResponse.redirect(new URL("/", request.url)));
   }
 
   return NextResponse.next();
