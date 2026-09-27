@@ -16,7 +16,7 @@ export class IngDoc {
   source: 'upload' | 'drive';
 
   /** Google Drive file ID (only for source='drive') */
-  @Prop({ index: true })
+  @Prop()
   driveFileId?: string;
 
   @Prop({
