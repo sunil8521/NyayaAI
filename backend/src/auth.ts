@@ -81,16 +81,4 @@ export const auth = betterAuth({
       },
     },
   },
-  advanced: {
-    useSecureCookies: process.env.NODE_ENV === 'production',
-    crossSubDomainCookies: {
-      enabled: true,
-    },
-    defaultCrossSiteStrict: true,
-  },
-  trustedProxies: ['127.0.0.1', '172.18.0.0/16', '10.0.0.0/8'],
-  rateLimit: {
-    window: 60,
-    max: 1000,
-  },
 });

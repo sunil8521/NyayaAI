@@ -28,7 +28,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
 
 # Install OCR system dependencies for production
-RUN apk add --no-cache tesseract-ocr poppler-utils
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng poppler-utils
 
 # Enable pnpm for production install
 RUN corepack enable && corepack prepare pnpm@latest --activate
