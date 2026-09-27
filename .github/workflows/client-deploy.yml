@@ -23,7 +23,7 @@ jobs:
           docker build \
             --build-arg NEXT_PUBLIC_APP_URL="https://rocky.legal" \
             --build-arg BACKEND_INTERNAL_URL="http://nyayaai-backend:4000" \
-            --build-arg NEXT_PUBLIC_ADMIN_EMAILS="sunilmaharana.0x@gmail.com" \
+            --build-arg NEXT_PUBLIC_ADMIN_EMAILS="sunilmaharana.0x@gmail.com,info@rocky.legal" \
             -t saga8521/nyayaai-client:latest .
 
       # 2. Save image
