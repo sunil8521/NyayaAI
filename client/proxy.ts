@@ -39,12 +39,20 @@ export function proxy(request: NextRequest) {
     })
       .then((res) => res.json())
       .then((sessionData) => {
-        if (!sessionData?.user || !adminEmails.includes(sessionData.user.email.toLowerCase())) {
-          return NextResponse.redirect(new URL("/", request.url));
+        if (!sessionData?.user) {
+          console.error("Middleware: No user found in session data", sessionData);
+          return NextResponse.redirect(new URL("/?error=no_user", request.url));
+        }
+        if (!adminEmails.includes(sessionData.user.email.toLowerCase())) {
+          console.error(`Middleware: User email ${sessionData.user.email} not in admin list:`, adminEmails);
+          return NextResponse.redirect(new URL("/?error=not_admin", request.url));
         }
         return NextResponse.next();
       })
-      .catch(() => NextResponse.redirect(new URL("/", request.url)));
+      .catch((err) => {
+        console.error("Middleware: Fetch get-session failed:", err);
+        return NextResponse.redirect(new URL("/?error=fetch_failed", request.url));
+      });
   }
 
   return NextResponse.next();
