@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 
 import { useState, useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
 import {
   FiMenu,
   FiSend,
@@ -52,21 +53,12 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
   const isAdmin = session?.user?.email && adminEmails.includes(session.user.email.toLowerCase());
 
-  const [input, setInput] = useState("");
+  const { register, handleSubmit, reset } = useForm<{ query: string }>();
+
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isExecutingRef = useRef(false);
-  const emptyStateTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const chatStateTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Reset textarea height when input is cleared programmatically (e.g., after sending)
-  useEffect(() => {
-    if (input === "") {
-      if (emptyStateTextareaRef.current) emptyStateTextareaRef.current.style.height = 'auto';
-      if (chatStateTextareaRef.current) chatStateTextareaRef.current.style.height = 'auto';
-    }
-  }, [input]);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -121,11 +113,14 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   }, [allMessages, isGenerating]);
 
   const executeSearch = async (query: string) => {
-    if (!query.trim() || isGenerating || isExecutingRef.current) return;
+    if (!query || !query.trim() || isGenerating || isExecutingRef.current) return;
 
     isExecutingRef.current = true;
     const userText = query.trim();
-    setInput("");
+    
+    reset();
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(ta => { ta.style.height = 'auto'; });
 
     try {
       if (!threadId) {
@@ -156,8 +151,8 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
     }
   };
 
-  const handleSend = () => {
-    executeSearch(input);
+  const onFormSubmit = (data: { query: string }) => {
+    executeSearch(data.query);
   };
 
   const handleNewChat = () => {
@@ -214,12 +209,11 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center max-w-4xl mx-auto w-full py-8 sm:py-12 animate-in fade-in duration-500">
           {/* Centered Search Input Box */}
           <div className="w-full relative mb-10 sm:mb-14">
-            <div className="relative border-b-2 border-[#1A1614]/15 dark:border-white/15 transition-colors focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] pb-2 sm:pb-3">
+            <form onSubmit={handleSubmit(onFormSubmit)} className="relative border-b-2 border-[#1A1614]/15 dark:border-white/15 transition-colors focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] pb-2 sm:pb-3">
               <textarea
-                ref={emptyStateTextareaRef}
-                value={input}
+                {...register("query")}
                 onChange={(e) => {
-                  setInput(e.target.value);
+                  register("query").onChange(e);
                   e.target.style.height = 'auto';
                   e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
                 }}
@@ -230,19 +224,19 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    handleSend();
+                    handleSubmit(onFormSubmit)();
                   }
                 }}
               />
               <button
-                onClick={handleSend}
-                disabled={!input.trim() || isGenerating}
+                type="submit"
+                disabled={isGenerating}
                 className="absolute right-0 bottom-1 sm:bottom-2 p-2.5 text-[#5A5550] dark:text-[#8A8279] hover:text-[#C7A064] dark:hover:text-[#C7A064] disabled:opacity-20 transition-colors cursor-pointer"
                 aria-label="Send query"
               >
                 <FiSend className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
-            </div>
+            </form>
           </div>
 
           {/* Suggested Queries Grid */}
@@ -388,12 +382,11 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
           {/* Floating Sticky Input Bar at Bottom */}
           <div className="p-3 sm:p-4 bg-linear-to-t from-[#FAFAFA] via-[#FAFAFA] to-transparent dark:from-[#0C0A09] dark:via-[#0C0A09] dark:to-transparent border-t border-[#1A1614]/5 dark:border-[#2A2522]/40 shrink-0">
             <div className="max-w-3xl mx-auto">
-              <div className="relative bg-white dark:bg-[#141210] border border-[#1A1614]/15 dark:border-[#2A2522] shadow-md rounded-2xl sm:rounded-3xl px-4 py-2 sm:py-2.5 flex items-end gap-3 transition-all focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] focus-within:ring-2 focus-within:ring-[#C7A064]/15">
+              <form onSubmit={handleSubmit(onFormSubmit)} className="relative bg-white dark:bg-[#141210] border border-[#1A1614]/15 dark:border-[#2A2522] shadow-md rounded-2xl sm:rounded-3xl px-4 py-2 sm:py-2.5 flex items-end gap-3 transition-all focus-within:border-[#C7A064] dark:focus-within:border-[#C7A064] focus-within:ring-2 focus-within:ring-[#C7A064]/15">
                 <textarea
-                  ref={chatStateTextareaRef}
-                  value={input}
+                  {...register("query")}
                   onChange={(e) => {
-                    setInput(e.target.value);
+                    register("query").onChange(e);
                     e.target.style.height = 'auto';
                     e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
                   }}
@@ -405,20 +398,20 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSend();
+                      handleSubmit(onFormSubmit)();
                     }
                   }}
                 />
                 <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isGenerating}
+                  type="submit"
+                  disabled={isGenerating}
                   className="px-4 py-2 bg-[#1A1614] dark:bg-[#C7A064] text-white dark:text-[#1A1614] font-semibold text-xs sm:text-sm rounded-xl sm:rounded-full hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs mb-0.5"
                   aria-label="Send message"
                 >
                   <span className="hidden sm:inline">Ask AI</span>
                   <FiSend className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-              </div>
+              </form>
               <p className="text-[10px] text-center text-[#5A5550]/60 dark:text-[#8A8279]/60 pt-2">
                 Rocky Legal Assistant for Indian Legal Research. Always verify critical statutory citations.
               </p>
