@@ -39,8 +39,8 @@ import { LanggraphModule } from './langgraph/langgraph.module';
           maxRetriesPerRequest: null,
           retryStrategy: (times) => {
             if (times > 3) {
-              console.error('❌ Redis connection failed. Stopping retry spam.');
-              return null;
+              console.error('❌ FATAL: Redis connection failed. Shutting down backend!');
+              process.exit(1);
             }
             return Math.min(times * 100, 3000);
           },
