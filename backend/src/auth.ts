@@ -32,7 +32,10 @@ export const auth = betterAuth({
       trustedProviders: ['google'],
     },
   },
-  database: mongodbAdapter(db, { client }),
+  database: mongodbAdapter(db, {
+    client,
+    transaction: false,
+  }),
   emailAndPassword: {
     enabled: true,
   },

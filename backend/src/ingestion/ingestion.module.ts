@@ -7,12 +7,15 @@ import { IngestionProcessor } from './ingestion.processor';
 import { GoogleDriveService } from './google-drive.service';
 import { EmbeddingService } from './embedding.service';
 import { DriveSyncWorker } from './drive-sync.worker';
+import { ClassificationService } from './classification/classification.service';
+import { ChatModule } from '../chat/chat.module';
 import { IngDoc, IngDocSchema } from './schemas/ingested-document.schema';
 import { SyncState, SyncStateSchema } from './schemas/sync-state.schema';
 
 @Module({
   imports: [
     ConfigModule,
+    ChatModule,
     BullModule.registerQueue({
       name: 'document-ingestion',
       defaultJobOptions: {
@@ -26,7 +29,13 @@ import { SyncState, SyncStateSchema } from './schemas/sync-state.schema';
     ]),
   ],
   controllers: [IngestionController],
-  providers: [IngestionProcessor, GoogleDriveService, EmbeddingService, DriveSyncWorker],
-  exports: [EmbeddingService],
+  providers: [
+    IngestionProcessor,
+    GoogleDriveService,
+    EmbeddingService,
+    DriveSyncWorker,
+    ClassificationService,
+  ],
+  exports: [EmbeddingService, ClassificationService],
 })
 export class IngestionModule {}

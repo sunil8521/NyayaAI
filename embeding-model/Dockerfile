@@ -17,14 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pull uv tool
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Sync standard dependencies
+# Sync standard dependencies (CPU-only PyTorch from uv.lock)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy your application source code
+# Copy application source code
 COPY main.py ./
-
-# Models will be dynamically downloaded to the mounted volume at runtime.
 
 # ── Stage 2: Minimal Runtime ──────────────────────────────────────
 FROM python:3.12-slim AS runtime
@@ -35,11 +33,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Copy python environment, application framework, and weights from builder
+# Copy python environment and application code from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/main.py /app/main.py
 
 EXPOSE 8000
 
-# Run with single worker to keep thread execution focused on CPU cores
+# Run with single worker to keep thread execution focused on designated CPU cores
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

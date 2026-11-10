@@ -1,23 +1,67 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document as MongooseDoc } from 'mongoose';
 
+@Schema({ _id: false })
+export class ClassificationData {
+  @Prop({ required: true })
+  documentType: string;
+
+  @Prop()
+  documentSubtype?: string;
+
+  @Prop()
+  court?: string;
+
+  @Prop()
+  tribunal?: string;
+
+  @Prop()
+  issuingAuthority?: string;
+
+  @Prop()
+  jurisdiction?: string;
+
+  @Prop()
+  title?: string;
+
+  @Prop()
+  caseNumber?: string;
+
+  @Prop()
+  caseTitle?: string;
+
+  @Prop({ type: [String], default: [] })
+  parties?: string[];
+
+  @Prop()
+  decisionDate?: string;
+
+  @Prop()
+  confidence?: number;
+
+  @Prop()
+  method?: string;
+
+  @Prop({ type: Array, default: [] })
+  evidence?: Array<{ field: string; page?: number; text: string }>;
+
+  @Prop()
+  needsReview?: boolean;
+}
+
 export type IngDocDocument = IngDoc & MongooseDoc;
 
 @Schema({ timestamps: true, collection: 'ingested_documents' })
 export class IngDoc {
-  /** YOUR permanent internal UUID — never reuse Google Drive's ID here. */
+  /** Google Drive file ID — single unique identifier across MongoDB & Qdrant */
   @Prop({ required: true, unique: true, index: true })
-  documentId: string;
+  driveFileId: string;
 
   @Prop({ required: true })
   fileName: string;
 
-  @Prop({ required: true, enum: ['upload', 'drive'] })
+  @Prop({ required: true, enum: ['upload', 'drive'], default: 'drive' })
   source: 'upload' | 'drive';
-
-  /** Google Drive file ID (only for source='drive') */
-  @Prop()
-  driveFileId?: string;
 
   @Prop({
     required: true,
@@ -47,6 +91,9 @@ export class IngDoc {
   @Prop()
   jurisdiction?: string;
 
+  @Prop({ type: ClassificationData })
+  classification?: ClassificationData;
+
   @Prop()
   fileSizeBytes?: number;
 
@@ -64,14 +111,11 @@ export class IngDoc {
   @Prop()
   failedAt?: Date;
 
-  @Prop({ index: true })
+  @Prop()
   deletedAt?: Date;
 }
 
 export const IngDocSchema = SchemaFactory.createForClass(IngDoc);
-
-// ⚡ Production indexes for sub-20ms dashboard queries
-IngDocSchema.index({ status: 1, driveModifiedTime: -1 }); // Dashboard sort by status + recency
-IngDocSchema.index({ status: 1, deletedAt: -1 });          // Deleted tab queries
-IngDocSchema.index({ driveFileId: 1 }, { unique: true, sparse: true }); // Drive sync dedup
-IngDocSchema.index({ fileName: 'text' });                   // Full-text search
+// Only 2 indexes needed besides _id_:
+// 1. driveFileId_1 (unique) - auto-created via @Prop({ unique: true, index: true })
+// 2. status_1 - auto-created via @Prop({ index: true })

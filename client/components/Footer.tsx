@@ -8,13 +8,11 @@ import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const productLinks = [
   { label: "Features", href: "#features" },
-  { label: "Updates", href: "/updates" },
+  { label: "Ask AI", href: "/ask" },
 ];
 
 const companyLinks = [
   { label: "About", href: "#about" },
-  { label: "Blog", href: "/blog" },
-  { label: "Careers", href: "/careers" },
 ];
 
 const legalLinks = [
@@ -40,7 +38,6 @@ export default function Footer() {
               <span className="text-[#1A1614] dark:text-[#E8E0D4] font-heading text-3xl font-normal italic">
                 Rocky Legal
               </span>
-              
             </Link>
             <p className="text-[#5A5550] dark:text-[#8A8279] text-sm leading-relaxed max-w-[260px] mb-6">
               AI assistant for legal research.
@@ -147,7 +144,7 @@ export default function Footer() {
       <div className="border-t border-[#1A1614]/10 dark:border-[#1A1614]">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5A5550] dark:text-[#8A8279]">
-            <p>© 2025 Rocky Legal. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} Rocky Legal. All rights reserved.</p>
             <p>Made with <span className="text-red-400">♥</span> in India</p>
           </div>
         </div>

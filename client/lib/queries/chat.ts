@@ -35,11 +35,14 @@ export function useCreateChatMutation() {
   return useMutation({
     mutationFn: createNewChat,
     onSuccess: (data) => {
-      // Optimistically prepend to sidebar chats
-      queryClient.setQueryData<ChatSession[]>(["chats"], (old) => [
-        data.chat,
-        ...(old || []),
-      ]);
+      // Optimistically prepend to sidebar chats without duplicating existing entries
+      queryClient.setQueryData<ChatSession[]>(["chats"], (old) => {
+        const existing = old || [];
+        const filtered = existing.filter(
+          (c) => c._id !== data.chat._id && c.threadId !== data.chat.threadId,
+        );
+        return [data.chat, ...filtered];
+      });
     },
   });
 }

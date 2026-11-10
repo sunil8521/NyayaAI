@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { randomUUID } from 'crypto';
 import { GoogleDriveService } from './google-drive.service';
 import { IngDoc, IngDocDocument } from './schemas/ingested-document.schema';
 import {
@@ -239,7 +238,6 @@ export class DriveSyncWorker implements OnApplicationShutdown {
                 filter: { driveFileId: df.id },
                 update: {
                   $setOnInsert: {
-                    documentId: randomUUID(),
                     driveFileId: df.id,
                     fileName: df.name,
                     folderPath: df.folderPath,
@@ -324,15 +322,21 @@ export class DriveSyncWorker implements OnApplicationShutdown {
       // Mark as NOT running, but KEEP the bookmark intact for resume!
       // The folderQueue + currentFolder + pageToken are already saved
       // from the last successful batch — next click resumes from there.
-      await this.syncStateModel.updateOne(
-        { key: SYNC_KEY },
-        {
-          $set: {
-            isSyncRunning: false,
-            lastSyncError: err.message?.slice(0, 500),
+      try {
+        await this.syncStateModel.updateOne(
+          { key: SYNC_KEY },
+          {
+            $set: {
+              isSyncRunning: false,
+              lastSyncError: err.message?.slice(0, 500),
+            },
           },
-        },
-      );
+        );
+      } catch (innerErr: any) {
+        this.logger.error(
+          `❌ Failed to update sync state after error: ${innerErr.message}`,
+        );
+      }
     }
   }
 

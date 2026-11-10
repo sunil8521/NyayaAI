@@ -6,11 +6,17 @@ Run with: uvicorn embedding_server:app --host 0.0.0.0 --port 8000
 """
 
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
-from pydantic import BaseModel
-from FlagEmbedding import BGEM3FlagModel
+from pydantic import BaseModel, Field
 import torch
+from FlagEmbedding import BGEM3FlagModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+# ── CPU thread configuration (leaves cores for NestJS API & OCR) ─
+CPU_THREADS = int(os.getenv("MODEL_CPU_THREADS", "6"))
+torch.set_num_threads(CPU_THREADS)
+torch.set_num_interop_threads(1)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,25 +25,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# ── Embedding model (BGE-M3) ──────────────────────────────────────
-model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=False)
+# ── Embedding model (BGE-M3 on CPU) ───────────────────────────────
+model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=False, devices=["cpu"])
 
 # ── Re-ranker model via Native Transformers (V5 Compatible) ──────
-# This removes the breaking FlagReranker wrapper entirely.
-# NOTE: Loaded on CPU because GPU (3.6GB) is fully used by BGE-M3.
-# Reranker is only called at search time, not bulk ingestion, so CPU is fine.
+# Loaded on CPU because GPU is not available on this server
 reranker_model_name = "BAAI/bge-reranker-v2-m3"
 reranker_tokenizer = AutoTokenizer.from_pretrained(reranker_model_name)
 reranker_model = AutoModelForSequenceClassification.from_pretrained(reranker_model_name)
-# Force CPU for reranker to avoid OOM, as BGE-M3 takes most of the VRAM
-# if torch.cuda.is_available():
-#     reranker_model = reranker_model.cuda().half()
 reranker_model.eval()
 
 
 # ── Embedding types ──────────────────────────────────────────────
 class EmbedRequest(BaseModel):
-    texts: list[str]
+    texts: list[str] = Field(min_length=1, max_length=64)
 
 
 class SparseVector(BaseModel):
@@ -48,6 +49,15 @@ class SparseVector(BaseModel):
 class EmbedResponse(BaseModel):
     dense: list[list[float]]
     sparse: list[SparseVector]
+
+
+# ── Token counting types ──────────────────────────────────────────
+class TokenCountRequest(BaseModel):
+    texts: list[str]
+
+
+class TokenCountResponse(BaseModel):
+    counts: list[int]
 
 
 # ── Re-ranking types ─────────────────────────────────────────────
@@ -61,17 +71,31 @@ class RerankResponse(BaseModel):
 
 
 # ── Endpoints ────────────────────────────────────────────────────
+@app.post("/count-tokens", response_model=TokenCountResponse)
+def count_tokens(req: TokenCountRequest):
+    """Accurately count tokens using the BGE-M3 model's native tokenizer."""
+    if not req.texts:
+        return TokenCountResponse(counts=[])
+
+    encodings = model.tokenizer(req.texts, add_special_tokens=False, padding=False, truncation=False)
+    counts = [len(ids) for ids in encodings["input_ids"]]
+    return TokenCountResponse(counts=counts)
+
+
 @app.post("/embed", response_model=EmbedResponse)
 def embed(req: EmbedRequest):
     if not req.texts:
         return EmbedResponse(dense=[], sparse=[])
 
-    output = model.encode(
-        req.texts,
-        return_dense=True,
-        return_sparse=True,
-        return_colbert_vecs=False,
-    )
+    with torch.inference_mode():
+        output = model.encode(
+            req.texts,
+            batch_size=4,
+            max_length=768,
+            return_dense=True,
+            return_sparse=True,
+            return_colbert_vecs=False,
+        )
 
     dense = output["dense_vecs"].tolist()
 
@@ -89,29 +113,30 @@ def embed(req: EmbedRequest):
             values.append(float(v))
         sparse.append(SparseVector(indices=indices, values=values))
 
+    if len(dense) != len(req.texts) or len(sparse) != len(req.texts):
+        raise RuntimeError("Embedding count mismatch between input and output vectors")
+
     return EmbedResponse(dense=dense, sparse=sparse)
 
 
 @app.post("/rerank", response_model=RerankResponse)
 def rerank(req: RerankRequest):
-    """Re-rank documents using native transformers, bypassing FlagReranker bugs."""
+    """Re-rank documents using native transformers (optimized for CPU with max_length=512)."""
     if not req.documents:
         return RerankResponse(scores=[])
 
-    pairs = [[req.query, doc] for doc in req.documents]
+    # Cap to top 12 candidates to prevent CPU saturation
+    docs = req.documents[:12]
+    pairs = [[req.query, doc] for doc in docs]
 
-    with torch.no_grad():
+    with torch.inference_mode():
         inputs = reranker_tokenizer(
             pairs,
             padding=True,
             truncation=True,
             return_tensors="pt",
-            max_length=8192,
+            max_length=512,
         )
-        # Reranker is on CPU, so we don't move inputs to CUDA
-        # if torch.cuda.is_available():
-        #     inputs = {k: v.cuda() for k, v in inputs.items()}
-
         outputs = reranker_model(**inputs)
         scores = outputs.logits.view(-1).float().cpu().tolist()
 
@@ -126,44 +151,49 @@ import numpy as np
 
 DOC_TYPE_DESCRIPTIONS = {
     "court_judgment": (
-        "Court judgment or order issued by a judge deciding a legal dispute. "
-        "Contains case title, parties (appellant vs respondent), coram, bench, "
-        "legal reasoning, holding, and disposition. Includes Supreme Court, "
-        "High Court, and District Court judgments."
+        "Final court judgment deciding a legal dispute on merits issued by the Supreme Court of India or High Court. "
+        "Contains case title, parties (appellant vs respondent), coram, bench, legal reasoning, holding, and disposition."
+    ),
+    "court_order": (
+        "Interim order, procedural order, daily order, or directions issued by a Court in pending proceedings."
     ),
     "tribunal_order": (
-        "Order issued by an administrative or quasi-judicial tribunal such as "
-        "NCLT, NCLAT, ITAT, DRT, DRAT, NGT, RERA, Competition Commission of India (CCI), "
-        "CESTAT, APTEL, or TDSAT. Contains tribunal name, case number, and ruling."
+        "Order or judgment issued by an administrative or quasi-judicial tribunal such as "
+        "NCLT, NCLAT, ITAT, DRT, DRAT, NGT, RERA, Competition Commission of India (CCI), CESTAT, APTEL, or TDSAT."
     ),
     "central_act": (
-        "Statutory Act, bare act, code, rules, or regulations enacted by the Indian Parliament "
-        "or State Legislature. Includes IPC, CrPC, BNS, CPC, Constitution of India, "
-        "ordinances, and delegated legislation."
+        "Central statutory bare act, code, statute, or ordinance enacted by the Indian Parliament, such as "
+        "Indian Penal Code, Criminal Procedure Code, Bharatiya Nyaya Sanhita, Companies Act, Arbitration Act."
     ),
-    "circular_notification": (
-        "Government circular, notification, advisory, guideline, or gazette notification "
-        "issued by a ministry, department, or regulatory authority such as RBI, SEBI, "
-        "or the Gazette of India."
+    "state_act": (
+        "Statutory Act enacted by a State Legislature governing state-specific subjects and amendments."
     ),
-    "writ_petition": (
-        "Writ petition, special leave petition (SLP), criminal appeal, civil appeal, "
-        "bail application, anticipatory bail, quashing petition, revision petition, "
-        "or review petition filed before a court."
+    "rules_regulations": (
+        "Subordinate or delegated legislation, statutory rules, regulations, guidelines, or bylaws framed under an Act."
     ),
-    "commercial_contract": (
-        "Commercial contract, agreement, memorandum of understanding (MoU), "
-        "non-disclosure agreement (NDA), lease deed, sale deed, power of attorney, "
-        "service agreement, employment agreement, or indemnity bond."
+    "circular": (
+        "Administrative or regulatory circular, master circular, or advisory issued by authorities like RBI, SEBI, or Ministry."
     ),
-    "criminal_complaint": (
-        "Criminal complaint, First Information Report (FIR), chargesheet, charge sheet, "
-        "police report under Section 173, complaint under Section 138 or 156(3), "
-        "CBI or Enforcement Directorate investigation report."
+    "notification": (
+        "Official government notification, statutory notification, or gazetted order issued by a ministry or department."
     ),
-    "legal_draft": (
-        "Legal notice, reply to legal notice, written statement, rejoinder, affidavit, "
-        "legal opinion, or other legal draft prepared by an advocate or legal professional."
+    "gazette": (
+        "The Gazette of India or State Official Gazette publication publishing statutes, rules, and government orders."
+    ),
+    "petition": (
+        "Writ petition, Special Leave Petition (SLP), criminal appeal, civil appeal, or review petition filed by advocates."
+    ),
+    "application": (
+        "Bail application, anticipatory bail application, complaint under Section 138 NI Act or Section 156(3) CrPC."
+    ),
+    "legal_contract": (
+        "Commercial contract, agreement, memorandum of understanding (MoU), non-disclosure agreement (NDA), lease deed, or service agreement."
+    ),
+    "legal_notice": (
+        "Statutory legal notice, reply to legal notice, advocate demand notice, or legal notice under Section 138."
+    ),
+    "legal_opinion": (
+        "Legal opinion, formal advice on law, or legal memorandum prepared by senior advocate or legal counsel."
     ),
 }
 
@@ -177,7 +207,15 @@ def _precompute_category_embeddings():
     descriptions = list(DOC_TYPE_DESCRIPTIONS.values())
     keys = list(DOC_TYPE_DESCRIPTIONS.keys())
 
-    output = model.encode(descriptions, return_dense=True, return_sparse=False, return_colbert_vecs=False)
+    with torch.inference_mode():
+        output = model.encode(
+            descriptions,
+            batch_size=4,
+            max_length=768,
+            return_dense=True,
+            return_sparse=False,
+            return_colbert_vecs=False,
+        )
     vecs = output["dense_vecs"]  # numpy array (N, 1024)
 
     for i, key in enumerate(keys):
@@ -203,7 +241,15 @@ def classify(req: ClassifyRequest):
         return ClassifyResponse(docType="general_legal", confidence=0.0, scores={})
 
     # Embed the input text (first 2-4k chars from the caller)
-    output = model.encode([req.text], return_dense=True, return_sparse=False, return_colbert_vecs=False)
+    with torch.inference_mode():
+        output = model.encode(
+            [req.text],
+            batch_size=1,
+            max_length=768,
+            return_dense=True,
+            return_sparse=False,
+            return_colbert_vecs=False,
+        )
     doc_vec = output["dense_vecs"][0]
     doc_vec = doc_vec / np.linalg.norm(doc_vec)  # L2 normalize
 

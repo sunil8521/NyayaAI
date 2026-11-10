@@ -20,8 +20,10 @@ export class ToolsService {
 
   getTools(): StructuredTool[] {
     const legalSearchTool = tool(
-      async ({ query, jurisdiction, docType }, config: LangGraphRunnableConfig) => {
-        this.logger.log(`🔧 [Tool Call] search_legal_docs -> query: "${query}"${jurisdiction ? `, jurisdiction: ${jurisdiction}` : ''}${docType ? `, docType: ${docType}` : ''}`);
+      async ({ query, jurisdiction, court, docType, documentType }, config: LangGraphRunnableConfig) => {
+        this.logger.log(
+          `🔧 [Tool Call] search_legal_docs -> query: "${query}"${court ? `, court: ${court}` : ''}${jurisdiction ? `, jurisdiction: ${jurisdiction}` : ''}${documentType || docType ? `, docType: ${documentType || docType}` : ''}`,
+        );
 
         try {
           const startTime = Date.now();
@@ -37,43 +39,86 @@ export class ToolsService {
           const denseVector = response.dense[0]; 
           const sparseVector = response.sparse[0];
 
-          // Build Qdrant metadata filter from optional params
-          // IGNORING LLM METADATA GUESSES FOR NOW: The LLM keeps hallucinating `tribunal_order` 
-          // which filters out all the real documents. 
-          const filter = undefined;
+          // Build Qdrant metadata filter
+          const mustFilters: any[] = [];
+          if (court) {
+            mustFilters.push({ key: 'court', match: { value: court } });
+          } else if (jurisdiction) {
+            mustFilters.push({ key: 'jurisdiction', match: { value: jurisdiction } });
+          }
 
-          // 2. Fetch a BROAD set of candidates from Qdrant (top 50)
-          const results = await this.qdrantService.hybridSearch({
+          const targetDocType = documentType || docType;
+          if (targetDocType) {
+            mustFilters.push({
+              should: [
+                { key: 'documentType', match: { value: targetDocType } },
+                { key: 'docType', match: { value: targetDocType } },
+              ],
+            });
+          }
+
+          const filter = mustFilters.length > 0 ? { must: mustFilters } : undefined;
+
+          const startQdrant = Date.now();
+          // 2. Fetch candidates from Qdrant (top 10 candidates for CPU reranking)
+          let results = await this.qdrantService.hybridSearch({
             denseVector,
             sparseVector,
             filter,
-            limit: 10, // Reduced from 30 to 10 because reranker is on CPU and too slow otherwise
+            limit: 10,
           });
 
+          // Soft filter fallback: If filtered search returns 0 results, retry without filter
+          if ((!results || !results.points || results.points.length === 0) && filter) {
+            this.logger.warn(`Filtered search yielded 0 results, falling back to unfiltered hybrid search`);
+            results = await this.qdrantService.hybridSearch({
+              denseVector,
+              sparseVector,
+              filter: undefined,
+              limit: 10,
+            });
+          }
+
+          const qdrantTimeMs = Date.now() - startQdrant;
           if (!results || !results.points || results.points.length === 0) {
             return 'No relevant documents found in the database for this query.';
           }
 
-          this.logger.log(`🔍 [Qdrant] Retrieved ${results.points.length} candidates. Sending to re-ranker...`);
+          this.logger.log(`🔍 [Qdrant: ${qdrantTimeMs}ms] Retrieved ${results.points.length} candidates. Sending to re-ranker...`);
 
-          // 3. Re-rank: cross-encoder scores each chunk against the query
-          const documents = results.points.map((p: any) => p.payload?.text ?? '');
-          const scores = await this.embeddingService.rerank(query, documents);
+          // 3. Re-rank with graceful fallback to Qdrant if reranking fails or times out
+          let reranked: any[] = [];
+          const candidatePoints = results.points.slice(0, 10);
+          const documents = candidatePoints.map((p: any) => p.payload?.text ?? '');
 
-          // 4. Zip results with re-ranker scores, filter out irrelevant ones, sort descending, take top 5
-          const SCORE_THRESHOLD = 0.0; // Typical cross-encoder threshold for relevance
-          const reranked = results.points
-            .map((point: any, i: number) => ({ ...point, rerankScore: scores[i] }))
-            .filter((point: any) => point.rerankScore >= SCORE_THRESHOLD)
-            .sort((a: any, b: any) => b.rerankScore - a.rerankScore)
-            .slice(0, 5);
+          try {
+            const startRerank = Date.now();
+            const scores = await this.embeddingService.rerank(query, documents);
+            const rerankTimeMs = Date.now() - startRerank;
+            this.logger.log(
+              `⏱️ [Latency Benchmark] Qdrant: ${qdrantTimeMs}ms | Reranker (${documents.length}): ${rerankTimeMs}ms | Total: ${qdrantTimeMs + rerankTimeMs}ms`,
+            );
 
-          if (reranked.length === 0) {
-            this.logger.log(`⚠️ [Re-ranker] All retrieved documents fell below the similarity threshold of ${SCORE_THRESHOLD}.`);
-            return 'No relevant documents found in the database for this query.';
+            // Zip results with re-ranker scores, filter out irrelevant ones, sort descending, take top 5
+            const SCORE_THRESHOLD = 0.0;
+            reranked = candidatePoints
+              .map((point: any, i: number) => ({ ...point, rerankScore: scores[i] }))
+              .filter((point: any) => point.rerankScore >= SCORE_THRESHOLD)
+              .sort((a: any, b: any) => b.rerankScore - a.rerankScore)
+              .slice(0, 5);
+
+            if (reranked.length === 0) {
+              this.logger.warn(`⚠️ [Re-ranker] All candidates fell below threshold, falling back to top Qdrant results`);
+              reranked = candidatePoints.slice(0, 5);
+            } else {
+              this.logger.log(`✅ [Re-ranker] Top scores: [${reranked.map((r: any) => r.rerankScore?.toFixed(3)).join(', ')}]`);
+            }
+          } catch (rerankErr: any) {
+            this.logger.warn(
+              `⚠️ Reranker timed out or failed (${rerankErr.message}). Gracefully falling back to top Qdrant hybrid results.`,
+            );
+            reranked = candidatePoints.slice(0, 5);
           }
-
-          this.logger.log(`✅ [Re-ranker] Top 5 scores: [${reranked.map((r: any) => r.rerankScore.toFixed(3)).join(', ')}]`);
 
           // 5. Emit source metadata to the stream via config.writer() (custom stream mode)
           const sourceMeta = reranked.map((point: any) => {
@@ -82,6 +127,10 @@ export class ToolsService {
               fileName: p.fileName ?? '',
               pageStart: p.pageStart ?? 0,
               pageEnd: p.pageEnd ?? 0,
+              paragraphNumber: p.paragraphNumber,
+              heading: p.heading,
+              section: p.section,
+              sectionHeading: p.sectionHeading,
               chunkIndex: p.chunkIndex ?? 0,
               docType: p.docType,
               jurisdiction: p.jurisdiction,
@@ -105,8 +154,10 @@ export class ToolsService {
               const pageRef = p.pageStart === p.pageEnd 
                 ? `p. ${p.pageStart}` 
                 : `pp. ${p.pageStart}-${p.pageEnd}`;
+              const paraRef = p.paragraphNumber ? ` · Para ${p.paragraphNumber}` : '';
+              const headingRef = p.sectionHeading ? ` · ${p.sectionHeading}` : p.heading ? ` · ${p.heading}` : '';
               
-              const source = `${p.fileName} · ${pageRef} · Chunk ${p.chunkIndex}`;
+              const source = `${p.fileName} · ${pageRef}${paraRef}${headingRef} · Chunk ${p.chunkIndex}`;
 
               return `--- Result ${i + 1} (rerank: ${point.rerankScore?.toFixed(3)}) ---\n**Source:** ${source}\n\n${p.text ?? ''}`;
             })
@@ -120,7 +171,7 @@ export class ToolsService {
               filters: (jurisdiction || docType) ? { jurisdiction, docType } : undefined,
               retrievedCount: results.points.length,
               finalChunks: reranked.map((point: any) => ({
-                documentId: point.payload?.documentId,
+                documentId: point.payload?.driveFileId || point.payload?.documentId,
                 fileName: point.payload?.fileName,
                 chunkIndex: point.payload?.chunkIndex,
                 score: point.rerankScore,
@@ -143,20 +194,28 @@ export class ToolsService {
         description:
           'Search the legal database for case laws, court judgments, precedents, statutes, and uploaded legal documents. ' +
           'Use this tool whenever the user asks about specific legal cases, court judgments, legal precedents, statutory interpretations, or information from the uploaded documents. ' +
-          'You can optionally filter by jurisdiction (e.g. Supreme_Court_of_India, Delhi_High_Court, NCLT, ITAT) ' +
-          'and/or docType (e.g. court_judgment, tribunal_order, central_act, writ_petition, commercial_contract, criminal_complaint, legal_draft).',
+          'You can optionally filter by court (e.g. Supreme Court of India, Delhi High Court), jurisdiction (e.g. All_India, Maharashtra), ' +
+          'and/or docType (e.g. court_judgment, court_order, tribunal_order, central_act, circular, notification, petition, legal_contract).',
         schema: z.object({
           query: z
             .string()
             .describe('The legal search query, keywords, case title, or statute to look up in the database.'),
+          court: z
+            .string()
+            .optional()
+            .describe('Optional: filter by specific court (e.g. Supreme Court of India, Delhi High Court). ONLY provide if explicitly mentioned in query.'),
           jurisdiction: z
             .string()
             .optional()
-            .describe('Optional: filter by court/tribunal (e.g. Supreme_Court_of_India, Delhi_High_Court, NCLT, Competition_Commission_of_India). ONLY provide this if the user explicitly mentions the jurisdiction. Do not guess.'),
+            .describe('Optional: filter by jurisdiction (e.g. All_India, Delhi, Maharashtra). ONLY provide if explicitly mentioned in query.'),
           docType: z
             .string()
             .optional()
-            .describe('Optional: filter by document type (e.g. court_judgment, tribunal_order, central_act, circular_notification). ONLY provide this if the user explicitly specifies the exact document type. Do not guess, otherwise search will fail.'),
+            .describe('Optional: filter by document type (e.g. court_judgment, court_order, tribunal_order, central_act, circular, notification, petition, legal_contract). ONLY provide if explicitly requested.'),
+          documentType: z
+            .string()
+            .optional()
+            .describe('Alias for docType.'),
         }),
       },
     );

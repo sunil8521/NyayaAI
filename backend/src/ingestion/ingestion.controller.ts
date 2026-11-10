@@ -5,17 +5,11 @@ import {
   Param,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
 import { Model } from 'mongoose';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { GoogleDriveService } from './google-drive.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { IngDoc, IngDocDocument } from './schemas/ingested-document.schema';
@@ -36,43 +30,6 @@ export class IngestionController {
     private readonly qdrantService: QdrantService,
     private readonly driveSyncWorker: DriveSyncWorker,
   ) { }
-
-  /**
-   * Manual PDF upload — writes file to /tmp and passes the path
-   * into BullMQ instead of stuffing the raw base64 into Redis RAM.
-   */
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadPdf(@UploadedFile() file: Express.Multer.File) {
-    const documentId = randomUUID();
-    const jobId = `manual-${Date.now()}`;
-
-    // Write uploaded file to /tmp so Redis only stores a small path string
-    const tmpPath = path.join('/tmp', `upload-${documentId}.pdf`);
-    await fs.writeFile(tmpPath, file.buffer);
-
-    // Track this document in MongoDB
-    await this.ingDocModel.create({
-      documentId,
-      fileName: file.originalname,
-      source: 'upload',
-      status: 'queued',
-      fileSizeBytes: file.size,
-    });
-
-    await this.queue.add(
-      'process-document',
-      {
-        source: 'upload',
-        fileName: file.originalname,
-        filePath: tmpPath,
-        documentId,
-      },
-      { jobId, ...JOB_RETRY_OPTS },
-    );
-
-    return { queued: true, jobId, documentId };
-  }
 
   /**
    * Preview all synced files from MongoDB (NO live Google Drive calls).
@@ -142,8 +99,8 @@ export class IngestionController {
 
     // Map MongoDB docs to the frontend-expected shape
     const mappedFiles = files.map((doc: any) => ({
-      id: doc.driveFileId || doc.documentId,
-      documentId: doc.documentId,
+      id: doc.driveFileId,
+      driveFileId: doc.driveFileId,
       fileName: doc.fileName,
       folderPath: doc.folderPath || '/',
       fileSizeBytes: doc.fileSizeBytes,
@@ -238,8 +195,8 @@ export class IngestionController {
     const totalPages = Math.ceil(total / limit);
 
     const files = docs.map((d) => ({
-      id: d.driveFileId || d.documentId,
-      documentId: d.documentId,
+      id: d.driveFileId,
+      driveFileId: d.driveFileId,
       fileName: d.fileName,
       folderPath: '/',
       fileSizeBytes: d.fileSizeBytes,
@@ -266,7 +223,7 @@ export class IngestionController {
     // syncDeletions is now called separately via its own "Sync with Drive" button
 
     const existingDocs = await this.ingDocModel
-      .find({ source: 'drive' }, { driveFileId: 1, documentId: 1, status: 1, fileName: 1 })
+      .find({ source: 'drive' }, { driveFileId: 1, status: 1, fileName: 1 })
       .lean();
 
     // Map: driveFileId → MongoDB doc (for lookup)
@@ -275,20 +232,12 @@ export class IngestionController {
       if (d.driveFileId) driveFileIdToDoc.set(d.driveFileId, d);
     }
 
-    // Set of driveFileIds that are already completed/processing/queued (skip them)
-    const completedOrActiveIds = new Set<string>(
-      existingDocs
-        .filter((d) => d.status !== 'new' && d.status !== 'failed' && d.status !== 'deleted')
-        .map((d) => d.driveFileId)
-        .filter(Boolean) as string[],
-    );
-
     let filesToQueue: { id: string; name: string }[] = [];
 
     if (body?.fileIds && body.fileIds.length > 0) {
       // Selective sync — queue specific files from MongoDB (no Drive API call needed)
       const requestedDocs = await this.ingDocModel
-        .find({ driveFileId: { $in: body.fileIds } }, { driveFileId: 1, fileName: 1, documentId: 1 })
+        .find({ driveFileId: { $in: body.fileIds } }, { driveFileId: 1, fileName: 1 })
         .lean();
       filesToQueue = requestedDocs
         .filter((d) => d.driveFileId)
@@ -307,12 +256,9 @@ export class IngestionController {
       // Check if this driveFileId already has a MongoDB doc
       const existingDoc = driveFileIdToDoc.get(file.id);
 
-      let documentId: string;
       if (existingDoc) {
-        // Reuse the existing UUID documentId (for retry or re-sync)
-        documentId = existingDoc.documentId;
         await this.ingDocModel.updateOne(
-          { documentId },
+          { driveFileId: file.id },
           {
             $set: {
               fileName: file.name || 'unknown.pdf',
@@ -326,10 +272,7 @@ export class IngestionController {
           },
         );
       } else {
-        // Brand new file → generate a UUID
-        documentId = randomUUID();
         await this.ingDocModel.create({
-          documentId,
           fileName: file.name || 'unknown.pdf',
           source: 'drive',
           driveFileId: file.id,
@@ -343,9 +286,8 @@ export class IngestionController {
           source: 'drive',
           driveFileId: file.id,
           fileName: file.name,
-          documentId,
         },
-        { jobId: `drive-${documentId}-${Date.now()}`, ...JOB_RETRY_OPTS },
+        { jobId: `drive-${file.id}-${Date.now()}`, ...JOB_RETRY_OPTS },
       );
     }
 
@@ -362,7 +304,7 @@ export class IngestionController {
 
     for (const doc of failedDocs) {
       await this.ingDocModel.updateOne(
-        { documentId: doc.documentId },
+        { driveFileId: doc.driveFileId },
         { status: 'queued', error: null, processedChunks: 0 },
       );
 
@@ -372,9 +314,8 @@ export class IngestionController {
           source: doc.source,
           driveFileId: doc.driveFileId,
           fileName: doc.fileName,
-          documentId: doc.documentId,
         },
-        { jobId: `retry-${doc.documentId}-${Date.now()}`, ...JOB_RETRY_OPTS },
+        { jobId: `retry-${doc.driveFileId}-${Date.now()}`, ...JOB_RETRY_OPTS },
       );
     }
 
@@ -409,14 +350,14 @@ export class IngestionController {
     for (const doc of deletedDocs) {
       // Remove chunks from Qdrant
       try {
-        await this.qdrantService.deleteByDocumentId(doc.documentId);
+        await this.qdrantService.deleteByDriveFileId(doc.driveFileId);
       } catch (e: any) {
         // Log but don't fail — the MongoDB status change is more important
       }
 
       // Mark as deleted in MongoDB (soft delete — keep the record)
       await this.ingDocModel.updateOne(
-        { documentId: doc.documentId },
+        { driveFileId: doc.driveFileId },
         { status: 'deleted', error: 'File removed from Google Drive', deletedAt: new Date() },
       );
     }
@@ -424,9 +365,9 @@ export class IngestionController {
     return {
       deletedCount: deletedDocs.length,
       deletedFiles: deletedDocs.map((d) => ({
-        documentId: d.documentId,
-        fileName: d.fileName,
+        id: d.driveFileId,
         driveFileId: d.driveFileId,
+        fileName: d.fileName,
       })),
     };
   }
@@ -455,10 +396,10 @@ export class IngestionController {
     };
   }
 
-  /** Check the ingestion status of a document by its documentId. */
-  @Get('status/:documentId')
-  async getStatus(@Param('documentId') documentId: string) {
-    const doc = await this.ingDocModel.findOne({ documentId }).lean();
+  /** Check the ingestion status of a document by its driveFileId. */
+  @Get('status/:id')
+  async getStatus(@Param('id') id: string) {
+    const doc = await this.ingDocModel.findOne({ driveFileId: id }).lean();
 
     if (!doc) {
       return { found: false };
@@ -466,7 +407,7 @@ export class IngestionController {
 
     return {
       found: true,
-      documentId: doc.documentId,
+      id: doc.driveFileId,
       driveFileId: doc.driveFileId,
       fileName: doc.fileName,
       source: doc.source,

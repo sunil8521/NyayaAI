@@ -264,10 +264,10 @@ export default function IngestionDashboard() {
     });
   };
 
-  const handleCheckStatus = async (documentId: string, fileName: string) => {
+  const handleCheckStatus = async (id: string, fileName: string) => {
     const toastId = toast.loading(`Checking "${fileName}"...`);
     try {
-      const res = await checkStatusMutation.mutateAsync(documentId);
+      const res = await checkStatusMutation.mutateAsync(id);
       if (res.found) {
         toast.success(`Status: ${res.status} · Chunks: ${res.chunkCount}`, { id: toastId });
       } else {
@@ -761,9 +761,9 @@ export default function IngestionDashboard() {
                                 </span>
                               ) : file.status === "failed" ? (
                                 <div className="flex items-center gap-2">
-                                  {file.documentId && (
+                                  {file.id && (
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); handleCheckStatus(file.documentId!, file.fileName); }}
+                                      onClick={(e) => { e.stopPropagation(); handleCheckStatus(file.id, file.fileName); }}
                                       disabled={checkStatusMutation.isPending}
                                       className="hidden sm:inline-flex px-3 py-1.5 text-[10px] sm:text-xs font-semibold rounded-lg bg-[#5A5550]/10 text-[#5A5550] dark:text-[#8A8279] hover:bg-[#5A5550]/20 border border-[#1A1614]/10 dark:border-white/10 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 whitespace-nowrap"
                                     >

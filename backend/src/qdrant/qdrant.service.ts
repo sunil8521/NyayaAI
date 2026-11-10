@@ -15,14 +15,38 @@ export interface LegalChunkPoint {
   sparseVector: SparseVector;
   payload: {
     text: string;
-    documentId: string;
+    driveFileId: string;
+    documentId?: string;
     fileName?: string;
     chunkIndex?: number;
     jurisdiction?: string;
     docType?: string;
+    documentType?: string;
+    documentSubtype?: string;
+    court?: string;
+    tribunal?: string;
+    issuingAuthority?: string;
+    caseNumber?: string;
+    caseTitle?: string;
+    decisionDate?: string;
+    chapter?: string;
+    section?: string;
+    sectionHeading?: string;
+    subsection?: string;
+    clause?: string;
+    heading?: string;
+    paragraphNumber?: string;
+    paragraphNumbers?: number[];
+    legalReferences?: string[];
+    parentPath?: string[];
+    isContinuation?: boolean;
+    tokenCount?: number;
     matterId?: string;
     date?: string;
     page?: number;
+    pageStart?: number;
+    pageEnd?: number;
+    uploadedAt?: string;
     [key: string]: unknown;
   };
 }
@@ -78,23 +102,28 @@ export class QdrantService implements OnModuleInit {
           },
         });
 
-        // Create payload indexes for fast filtered searches
-        await this.client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'documentId',
-          field_schema: 'keyword',
-        });
-        await this.client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'docType',
-          field_schema: 'keyword',
-        });
-        await this.client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'jurisdiction',
-          field_schema: 'keyword',
-        });
-
         this.logger.log(`✅ Collection "${COLLECTION_NAME}" created successfully.`);
       } else {
         this.logger.log(`✅ Qdrant connected, collection "${COLLECTION_NAME}" is ready.`);
+      }
+
+      // Ensure only required payload indexes exist for fast filtered retrieval & deletion
+      const payloadIndexes = [
+        'driveFileId',
+        'court',
+        'jurisdiction',
+        'docType',
+        'documentType',
+      ];
+      for (const field_name of payloadIndexes) {
+        try {
+          await this.client.createPayloadIndex(COLLECTION_NAME, {
+            field_name,
+            field_schema: 'keyword',
+          });
+        } catch {
+          // Index already exists, ignore
+        }
       }
     } catch (error) {
       this.logger.error(`❌ FATAL: Failed to initialize Qdrant: ${error}. Shutting down backend!`);
@@ -118,16 +147,24 @@ export class QdrantService implements OnModuleInit {
   }
 
   /**
-   * Delete all chunks belonging to a specific document.
+   * Delete all chunks belonging to a specific Google Drive file.
    * Useful for re-ingesting a failed or updated document cleanly.
    */
-  async deleteByDocumentId(documentId: string): Promise<void> {
+  async deleteByDriveFileId(driveFileId: string): Promise<void> {
     await this.client.delete(COLLECTION_NAME, {
       wait: true,
       filter: {
-        must: [{ key: 'documentId', match: { value: documentId } }],
+        should: [
+          { key: 'driveFileId', match: { value: driveFileId } },
+          { key: 'documentId', match: { value: driveFileId } },
+        ],
       },
     });
+  }
+
+  /** Backward-compatible alias for deleteByDriveFileId */
+  async deleteByDocumentId(documentId: string): Promise<void> {
+    return this.deleteByDriveFileId(documentId);
   }
 
   /**

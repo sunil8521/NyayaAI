@@ -153,7 +153,7 @@ export function useCheckStatusMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (documentId: string) => fetchDocumentStatus(documentId),
+    mutationFn: (id: string) => fetchDocumentStatus(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ingestion", "drive-preview"] });
       queryClient.invalidateQueries({ queryKey: ["ingestion", "dashboard"] });

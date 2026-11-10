@@ -1,6 +1,6 @@
 export interface DriveFileItem {
   id: string;
-  documentId?: string;
+  driveFileId?: string;
   fileName: string;
   folderPath: string;
   fileSizeBytes?: number;
@@ -136,7 +136,7 @@ export async function retryFailedPdfs(): Promise<{ retriedCount: number }> {
 // 5. Sync deletions — detect files removed from Drive and soft-delete
 export async function syncDriveDeletions(): Promise<{
   deletedCount: number;
-  deletedFiles: Array<{ documentId: string; fileName: string; driveFileId: string }>;
+  deletedFiles: Array<{ id: string; fileName: string; driveFileId: string }>;
 }> {
   return apiFetch("/api/ingestion/sync-deletions", { method: "POST" });
 }
@@ -162,8 +162,8 @@ export async function fetchDeletedDocuments(
 }
 
 // 7. Check status of a single document
-export async function fetchDocumentStatus(documentId: string): Promise<any> {
-  return apiFetch(`/api/ingestion/status/${documentId}`);
+export async function fetchDocumentStatus(id: string): Promise<any> {
+  return apiFetch(`/api/ingestion/status/${id}`);
 }
 
 // 8. Trigger Drive → MongoDB background sync (manual "Load File" button)

@@ -40,7 +40,18 @@ function groupChatsByDate(chats: ChatSession[]) {
     { title: "Older", chats: [] as ChatSession[] },
   ];
 
+  // Defensive deduplication to ensure unique keys in React render
+  const seen = new Set<string>();
+  const uniqueChats: ChatSession[] = [];
   for (const chat of chats) {
+    const key = chat._id || chat.threadId;
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      uniqueChats.push(chat);
+    }
+  }
+
+  for (const chat of uniqueChats) {
     const time = new Date(chat.updatedAt || chat.createdAt).getTime();
     if (time >= todayStart) {
       groups[0].chats.push(chat);
