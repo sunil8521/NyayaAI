@@ -1,7 +1,9 @@
+
 name: Deploy Backend
 
 on:
   workflow_dispatch:
+
   push:
     branches:
       - main
@@ -10,124 +12,124 @@ on:
       - '.github/workflows/backend-deploy.yml'
 
 jobs:
-  deploy:
+
+  # STEP 1: Build and push Docker image
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Build Docker image
-      - name: Build Docker Image
-        run: |
-          cd backend
-          docker build -t saga8521/nyayaai-backend:latest .
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 2. Save Docker image
-      - name: Save Docker Image
-        run: |
-          docker save saga8521/nyayaai-backend:latest | gzip > backend.tar.gz
-          ls -lh backend.tar.gz
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            saga8521/server:latest
+            saga8521/server:${{ github.sha }}
 
-      # 3. Cleanup Server
-      - name: Cleanup Server
-        run: |
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -T \
-            -o StrictHostKeyChecking=accept-new \
-            -o KexAlgorithms=curve25519-sha256 \
-            -o ConnectTimeout=30 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
+  # STEP 2: Deploy on EC2
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Backend on Server
+        uses: appleboy/ssh-action@v1.2.2
+
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+
+          envs: IMAGE_TAG,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+
+          script: |
             set -e
 
-            echo "=== Removing old backend container ==="
-            docker rm -f nyayaai-backend || true
+            IMAGE="saga8521/server"
+            CONTAINER="nyayaai-backend"
 
-            echo "=== Removing old backend image ==="
-            docker rmi saga8521/nyayaai-backend:latest || true
+            echo "===== Docker Hub Login ====="
 
-            echo "=== Removing old tar files ==="
-            rm -f ~/backend.tar
-            rm -f ~/backend.tar.gz
+            echo "$DOCKERHUB_TOKEN" | docker login \
+              -u "$DOCKERHUB_USERNAME" \
+              --password-stdin
 
-            echo "=== Cleaning unused images ==="
-            docker image prune -f
-          EOF
+            echo "===== Pulling New Backend Image ====="
 
-      # 4. Copy new image to Server
-      - name: Copy Image to Server
-        run: |
-          # Force curve25519-sha256 to prevent MTU drop/connection closed on Ubuntu OpenSSH
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" scp \
-            -o StrictHostKeyChecking=accept-new \
-            -o KexAlgorithms=curve25519-sha256 \
-            -o ConnectTimeout=30 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            -C \
-            backend.tar.gz \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/backend.tar.gz
+            docker pull "$IMAGE:$IMAGE_TAG"
 
-      # 5. Load and run backend
-      - name: Deploy Backend Container
-        run: |
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -T \
-            -o StrictHostKeyChecking=accept-new \
-            -o KexAlgorithms=curve25519-sha256 \
-            -o ConnectTimeout=30 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
-            set -e
+            docker logout
 
-            echo "=== Loading Docker image ==="
-            docker load -i ~/backend.tar.gz
+            echo "===== Checking Docker Network ====="
 
-            echo "=== Removing tar file ==="
-            rm -f ~/backend.tar.gz
-
-            echo "=== Checking Docker network ==="
             docker network inspect rockey-legal-network >/dev/null 2>&1 || {
-              echo "ERROR: Docker network rockey-legal-network does not exist"
+              echo "ERROR: Docker network does not exist"
               docker network ls
               exit 1
             }
 
-            echo "=== Checking environment file ==="
-            if [ ! -f ~/.env.backend ]; then
+            echo "===== Checking Environment File ====="
+
+            if [ ! -f "$HOME/.env.backend" ]; then
               echo "ERROR: ~/.env.backend does not exist"
               exit 1
             fi
 
-            echo "=== Starting backend container ==="
+            echo "===== Removing Old Backend Container ====="
+
+            docker rm -f "$CONTAINER" || true
+
+            echo "===== Starting New Backend Container ====="
+
             docker run -d \
-              --name nyayaai-backend \
+              --name "$CONTAINER" \
               --restart always \
               --network rockey-legal-network \
               -p 4000:4000 \
-              --env-file ~/.env.backend \
-              saga8521/nyayaai-backend:latest
+              --env-file "$HOME/.env.backend" \
+              "$IMAGE:$IMAGE_TAG"
 
-            echo "=== Waiting for container ==="
+            echo "===== Waiting for Backend ====="
+
             sleep 5
 
-            echo "=== Container status ==="
-            docker ps -a --filter "name=nyayaai-backend"
+            echo "===== Container Status ====="
 
-            echo "=== Backend logs ==="
-            docker logs --tail 100 nyayaai-backend
+            docker ps -a --filter "name=$CONTAINER"
 
-            echo "=== Verifying container is running ==="
-            if [ "$(docker inspect -f '{{.State.Running}}' nyayaai-backend)" != "true" ]; then
-              echo "ERROR: Backend container is not running!"
-              echo "Exit code:"
-              docker inspect -f '{{.State.ExitCode}}' nyayaai-backend
+            echo "===== Backend Logs ====="
+
+            docker logs --tail 100 "$CONTAINER"
+
+            echo "===== Verifying Container ====="
+
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" != "true" ]; then
+
+              echo "ERROR: Backend container failed!"
+
+              docker inspect "$CONTAINER"
+              docker logs --tail 100 "$CONTAINER"
+
               exit 1
             fi
 
-            echo "=== Backend deployment successful ==="
+            echo "===== Cleaning Dangling Images ====="
 
-            echo "=== Cleaning unused images ==="
             docker image prune -f
-          EOF
+
+            echo "===== Backend Deployment Successful ====="
