@@ -34,11 +34,10 @@ jobs:
           ls -lh client.tar.gz
 
       # 3. Setup SSH
-      - name: Setup SSH Key
+      - name: Setup SSH
         run: |
+          sudo apt-get update -y && sudo apt-get install -y sshpass
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
           printf '%s\n' \
             'Host *' \
@@ -55,7 +54,7 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
 
@@ -77,8 +76,7 @@ jobs:
       - name: Copy Image to EC2
         run: |
           # Force curve25519-sha256 to prevent MTU drop/connection closed on Ubuntu OpenSSH
-          scp \
-            -i ~/.ssh/id_ed25519 \
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" scp \
             -o KexAlgorithms=curve25519-sha256 \
             -o ConnectTimeout=30 \
             -o ServerAliveInterval=15 \
@@ -93,7 +91,7 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
 
