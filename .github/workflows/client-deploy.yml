@@ -33,29 +33,16 @@ jobs:
           docker save saga8521/nyayaai-client:latest | gzip > client.tar.gz
           ls -lh client.tar.gz
 
-      # 3. Setup SSH
-      - name: Setup SSH
-        run: |
-          sudo apt-get update -y && sudo apt-get install -y sshpass
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          printf '%s\n' \
-            'Host *' \
-            '  KexAlgorithms curve25519-sha256' \
-            '  ServerAliveInterval 15' \
-            '  ServerAliveCountMax 3' \
-            '  StrictHostKeyChecking accept-new' \
-            >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-
-      # 4. Remove old container/image
+      # 3. Cleanup Server
       - name: Cleanup Server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          script: |
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -T \
+            -o StrictHostKeyChecking=accept-new \
+            -o KexAlgorithms=curve25519-sha256 \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
             set -e
 
             echo "=== Removing old container ==="
@@ -71,12 +58,14 @@ jobs:
 
             echo "=== Docker cleanup ==="
             docker image prune -f
+          EOF
 
-      # 5. Copy new image
-      - name: Copy Image to EC2
+      # 4. Copy new image
+      - name: Copy Image to Server
         run: |
           # Force curve25519-sha256 to prevent MTU drop/connection closed on Ubuntu OpenSSH
           sshpass -p "${{ secrets.SSH_PASSWORD }}" scp \
+            -o StrictHostKeyChecking=accept-new \
             -o KexAlgorithms=curve25519-sha256 \
             -o ConnectTimeout=30 \
             -o ServerAliveInterval=15 \
@@ -85,14 +74,16 @@ jobs:
             client.tar.gz \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/client.tar.gz
 
-      # 6. Load + Run + Verify
+      # 5. Load + Run + Verify
       - name: Deploy Container
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          script: |
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -T \
+            -o StrictHostKeyChecking=accept-new \
+            -o KexAlgorithms=curve25519-sha256 \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
             set -e
 
             echo "=== Loading Docker image ==="
@@ -132,3 +123,4 @@ jobs:
             fi
 
             echo "=== Deployment successful ==="
+          EOF
