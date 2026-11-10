@@ -1,3 +1,4 @@
+
 name: Test SSH Connection
 
 on:
@@ -6,13 +7,14 @@ on:
 jobs:
   test-ssh:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Deploy on Server
+      - name: Deploy on Server Two
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
+          host: 82.41.67.195
+          username: root
+          password: wndNBvxlnvlqndgd5WCA
           port: 22
           timeout: 30s
           command_timeout: 10m
