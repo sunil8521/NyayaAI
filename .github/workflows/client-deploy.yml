@@ -1,118 +1,23 @@
-
-name: Deploy Client
+name: Test SSH Connection
 
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - main
-    paths:
-      - 'client/**'
-      - '.github/workflows/client-deploy.yml'
-
 jobs:
-
-  # STEP 1: Build and push image to Docker Hub
-  build:
+  test-ssh:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and Push Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./client
-          push: true
-          tags: |
-            saga8521/client:latest
-            saga8521/client:${{ github.sha }}
-          build-args: |
-            NEXT_PUBLIC_APP_URL=https://rocky.legal
-            BACKEND_INTERNAL_URL=http://nyayaai-backend:4000
-            NEXT_PUBLIC_ADMIN_EMAILS=sunilmaharana.0x@gmail.com,info@rocky.legal
-
-  # STEP 2: Deploy on server
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Deploy Client on Server
+      - name: Deploy on Server
         uses: appleboy/ssh-action@v1.2.2
-
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-
-          envs: IMAGE_TAG,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
-
+          port: 22
+          timeout: 30s
+          command_timeout: 10m
           script: |
-            set -e
-
-            IMAGE="saga8521/client"
-            CONTAINER="nyayaai-client"
-
-            echo "===== Docker Hub Login ====="
-
-            echo "$DOCKERHUB_TOKEN" | docker login \
-              -u "$DOCKERHUB_USERNAME" \
-              --password-stdin
-
-            echo "===== Pulling New Image ====="
-
-            docker pull "$IMAGE:$IMAGE_TAG"
-
-            echo "===== Checking Network ====="
-
-            docker network inspect rockey-legal-network >/dev/null 2>&1 || {
-              echo "Docker network not found!"
-              exit 1
-            }
-
-            echo "===== Removing Old Container ====="
-
-            docker rm -f "$CONTAINER" || true
-
-            echo "===== Starting New Container ====="
-
-            docker run -d \
-              --name "$CONTAINER" \
-              --restart always \
-              --network rockey-legal-network \
-              -p 3000:3000 \
-              "$IMAGE:$IMAGE_TAG"
-
-            echo "===== Waiting for Container ====="
-
-            sleep 5
-
-            if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" != "true" ]; then
-              echo "Deployment Failed!"
-
-              docker logs --tail 100 "$CONTAINER"
-
-              exit 1
-            fi
-
-            echo "===== Cleaning Dangling Images ====="
-
-            docker image prune -f
-
-            echo "===== Deployment Successful ====="
-
-            docker ps --filter "name=$CONTAINER"
+            echo "SSH connection successful"
+            whoami
+            hostname
+            docker ps
