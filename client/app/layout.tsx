@@ -6,6 +6,7 @@ import Providers from "./providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import AuthModal from "@/components/AuthModal";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -195,6 +196,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Toaster richColors position="bottom-right" closeButton />
           </Providers>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
