@@ -49,7 +49,9 @@ export default function ChatArea({ threadId, onOpenSidebar }: ChatAreaProps) {
   const router = useRouter();
   const { data: session } = useSession();
 
-  const adminEmailsStr = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
+  const adminEmailsStr =
+    process.env.NEXT_PUBLIC_ADMIN_EMAILS ||
+    "sunilmaharana.0x@gmail.com,sunilmaharana8521@gmail.com,info@rocky.legal";
   const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
   const isAdmin = session?.user?.email && adminEmails.includes(session.user.email.toLowerCase());
 

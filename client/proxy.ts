@@ -31,21 +31,30 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 
-    const adminEmailsStr = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
+    const adminEmailsStr =
+      process.env.NEXT_PUBLIC_ADMIN_EMAILS ||
+      "sunilmaharana.0x@gmail.com,sunilmaharana8521@gmail.com,info@rocky.legal";
     const adminEmails = adminEmailsStr.split(",").map((e) => e.trim().toLowerCase());
 
-    // Fetch from localhost so it hits the Next.js server and triggers the next.config.ts rewrite to the backend
-    return fetch("http://localhost:3000/api/auth/get-session", {
+    const backendUrl = process.env.BACKEND_INTERNAL_URL || "https://api.rocky.legal";
+    const sessionUrl = `${backendUrl}/api/auth/get-session`;
+
+    return fetch(sessionUrl, {
       headers: { cookie: request.headers.get("cookie") || "" },
     })
       .then((res) => res.json())
       .then((sessionData) => {
-        if (!sessionData?.user || !adminEmails.includes(sessionData.user.email.toLowerCase())) {
+        const userEmail = sessionData?.user?.email?.toLowerCase();
+        if (!userEmail || !adminEmails.includes(userEmail)) {
+          console.warn("Unauthorized access to /internal/ingestion by:", userEmail);
           return NextResponse.redirect(new URL("/", request.url));
         }
         return NextResponse.next();
       })
-      .catch(() => NextResponse.redirect(new URL("/", request.url)));
+      .catch((err) => {
+        console.error("Middleware ingestion auth error:", err);
+        return NextResponse.redirect(new URL("/", request.url));
+      });
   }
 
   return NextResponse.next();
