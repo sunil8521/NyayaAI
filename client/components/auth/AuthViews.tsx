@@ -59,35 +59,34 @@ export function SuccessBanner({ message }: { message: string | null }) {
 
 export function GoogleButton({ setAuthError }: { setAuthError: (e: string | null) => void }) {
   const [isLoading, setIsLoading] = useState(false);
-  const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL;
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
-    setIsLoading(true);
-    try {
-      const res = await signIn.social({
+    await signIn.social(
+      {
         provider: "google",
-        callbackURL: `${origin}/ask`,
-        errorCallbackURL: `${origin}/?auth=signin&error=cancelled`,
-      });
-      if (res?.error) {
-        setAuthError(res.error.message || "Failed to connect to Google authentication.");
-        setIsLoading(false);
+        callbackURL: "/ask",
+        errorCallbackURL: "/?auth=signin&error=cancelled",
+      },
+      {
+        onRequest: () => setIsLoading(true),
+        onResponse: () => setIsLoading(false),
+        onError: (ctx) => {
+          setIsLoading(false);
+          const msg = ctx.error.message || "";
+          if (
+            msg.includes("502") ||
+            msg.toLowerCase().includes("bad gateway") ||
+            msg.toLowerCase().includes("failed to fetch") ||
+            msg.toLowerCase().includes("networkerror")
+          ) {
+            setAuthError("Authentication server is temporarily unreachable (502). Please check connection.");
+          } else {
+            setAuthError(msg || "Google sign-in failed. Please try again.");
+          }
+        },
       }
-    } catch (err: any) {
-      const msg = err?.message || err?.statusText || "";
-      if (
-        msg.includes("502") ||
-        msg.toLowerCase().includes("bad gateway") ||
-        msg.toLowerCase().includes("failed to fetch") ||
-        msg.toLowerCase().includes("networkerror")
-      ) {
-        setAuthError("Authentication server is temporarily unreachable (502). Please check connection.");
-      } else {
-        setAuthError(msg || "Google sign-in failed. Please try again.");
-      }
-      setIsLoading(false);
-    }
+    );
   };
 
   return (
