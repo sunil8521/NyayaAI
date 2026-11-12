@@ -4,7 +4,8 @@ const backendUrl =
   process.env.BACKEND_INTERNAL_URL!;
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Only use standalone if explicitly building with Docker
+  ...(process.env.DOCKER_BUILD === "true" ? { output: "standalone" } : {}),
   reactCompiler: true,
   allowedDevOrigins: [
     "rocky.legal",
