@@ -58,28 +58,56 @@ export function SuccessBanner({ message }: { message: string | null }) {
 }
 
 export function GoogleButton({ setAuthError }: { setAuthError: (e: string | null) => void }) {
+  const [isLoading, setIsLoading] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL;
+
   const handleGoogleSignIn = async () => {
     setAuthError(null);
+    setIsLoading(true);
     try {
-      await signIn.social({
+      const res = await signIn.social({
         provider: "google",
         callbackURL: `${origin}/ask`,
         errorCallbackURL: `${origin}/?auth=signin&error=cancelled`,
       });
+      if (res?.error) {
+        setAuthError(res.error.message || "Failed to connect to Google authentication.");
+        setIsLoading(false);
+      }
     } catch (err: any) {
-      setAuthError(err?.message || "Google sign-in failed.");
+      const msg = err?.message || err?.statusText || "";
+      if (
+        msg.includes("502") ||
+        msg.toLowerCase().includes("bad gateway") ||
+        msg.toLowerCase().includes("failed to fetch") ||
+        msg.toLowerCase().includes("networkerror")
+      ) {
+        setAuthError("Authentication server is temporarily unreachable (502). Please check connection.");
+      } else {
+        setAuthError(msg || "Google sign-in failed. Please try again.");
+      }
+      setIsLoading(false);
     }
   };
 
   return (
     <button
       type="button"
+      disabled={isLoading}
       onClick={handleGoogleSignIn}
-      className="w-full py-3.5 mb-6 bg-white dark:bg-[#1A1614]/40 hover:bg-[#F5F5F5] dark:hover:bg-[#1A1614]/60 border border-[#1A1614]/10 dark:border-[#2A2522] text-[#1A1614] dark:text-[#E8E0D4] font-semibold rounded-xl transition-all flex items-center justify-center gap-3 text-sm cursor-pointer shadow-xs"
+      className="w-full py-3.5 mb-6 bg-white dark:bg-[#1A1614]/40 hover:bg-[#F5F5F5] dark:hover:bg-[#1A1614]/60 border border-[#1A1614]/10 dark:border-[#2A2522] text-[#1A1614] dark:text-[#E8E0D4] font-semibold rounded-xl transition-all flex items-center justify-center gap-3 text-sm cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
     >
-      <FcGoogle className="w-5 h-5" />
-      Continue with Google
+      {isLoading ? (
+        <>
+          <FiLoader className="w-5 h-5 animate-spin text-[#C7A064]" />
+          <span>Connecting to Google...</span>
+        </>
+      ) : (
+        <>
+          <FcGoogle className="w-5 h-5" />
+          <span>Continue with Google</span>
+        </>
+      )}
     </button>
   );
 }
@@ -100,13 +128,24 @@ export function SignInView() {
     setAuthError(null);
     try {
       const res = await signIn.email({ email: data.email, password: data.password, callbackURL: `${origin}/ask` });
-      if (res?.error) setAuthError(res.error.message || "Invalid email or password");
-      else {
+      if (res?.error) {
+        const msg = res.error.message || "";
+        if (msg.includes("502") || msg.toLowerCase().includes("bad gateway") || msg.toLowerCase().includes("failed to fetch")) {
+          setAuthError("Authentication service is temporarily unavailable (502). Please try again shortly.");
+        } else {
+          setAuthError(msg || "Invalid email or password");
+        }
+      } else {
         useUIStore.getState().closeAuthModal();
         router.push("/ask");
       }
     } catch (err: any) {
-      setAuthError(err?.message || "An unexpected error occurred.");
+      const msg = err?.message || "";
+      if (msg.includes("502") || msg.toLowerCase().includes("bad gateway") || msg.toLowerCase().includes("failed to fetch")) {
+        setAuthError("Authentication service is temporarily unavailable (502). Please try again shortly.");
+      } else {
+        setAuthError(msg || "An unexpected error occurred.");
+      }
     }
   };
 
@@ -188,14 +227,24 @@ export function SignUpView() {
       } as any);
 
       if (res?.error) {
-        setAuthError(res.error.message || "Failed to create account.");
+        const msg = res.error.message || "";
+        if (msg.includes("502") || msg.toLowerCase().includes("bad gateway") || msg.toLowerCase().includes("failed to fetch")) {
+          setAuthError("Authentication service is temporarily unavailable (502). Please try again shortly.");
+        } else {
+          setAuthError(msg || "Failed to create account.");
+        }
       } else {
         // Switch to OTP verify flow instead of signing in!
         setAuthEmail(data.email);
         setAuthModalTab("verify-email-otp");
       }
     } catch (err: any) {
-      setAuthError(err?.message || "An unexpected error occurred.");
+      const msg = err?.message || "";
+      if (msg.includes("502") || msg.toLowerCase().includes("bad gateway") || msg.toLowerCase().includes("failed to fetch")) {
+        setAuthError("Authentication service is temporarily unavailable (502). Please try again shortly.");
+      } else {
+        setAuthError(msg || "An unexpected error occurred.");
+      }
     }
   };
 
