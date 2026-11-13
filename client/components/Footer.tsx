@@ -6,13 +6,8 @@ import { FaLinkedinIn, FaXTwitter, FaInstagram } from "react-icons/fa6";
 import { GoLaw } from "react-icons/go";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
-const productLinks = [
-  { label: "Features", href: "#features" },
-  { label: "Ask AI", href: "/ask" },
-];
-
 const companyLinks = [
-  { label: "About", href: "#about" },
+  { label: "About", href: "/#about" },
 ];
 
 const legalLinks = [
@@ -39,7 +34,7 @@ export default function Footer() {
                 Rocky Legal
               </span>
             </Link>
-            <p className="text-[#5A5550] dark:text-[#8A8279] text-sm leading-relaxed max-w-[260px] mb-6">
+            <p className="text-[#5A5550] dark:text-[#8A8279] text-sm leading-relaxed max-w-[280px] mb-6">
               AI assistant for legal research.
               Built for India. Trusted by legal professionals.
             </p>
@@ -69,35 +64,12 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Product */}
+          {/* Company */}
           <div
-            className={`md:col-span-2 transition-all duration-700 ${
+            className={`col-span-1 md:col-span-3 transition-all duration-700 ${
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
             }`}
             style={{ transitionDelay: isVisible ? "150ms" : "0ms" }}
-          >
-            <h4 className="text-[#1A1614] dark:text-[#E8E0D4] text-sm font-semibold mb-4">Product</h4>
-            <ul className="space-y-3">
-              {productLinks.map((link) => (
-                <li key={link.label}>
-                  <Link href={link.href} className="group flex items-center text-[#5A5550] dark:text-[#8A8279] text-sm hover:text-[#C7A064] dark:hover:text-[#E8E0D4] transition-colors w-fit">
-                    <span className="relative">
-                      {link.label}
-                      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-[#C7A064] dark:bg-[#E8E0D4] transition-all duration-300 group-hover:w-full"></span>
-                    </span>
-                    <FiArrowRight className="w-3 h-3 ml-1.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Company */}
-          <div
-            className={`md:col-span-2 transition-all duration-700 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-            }`}
-            style={{ transitionDelay: isVisible ? "250ms" : "0ms" }}
           >
             <h4 className="text-[#1A1614] dark:text-[#E8E0D4] text-sm font-semibold mb-4">Company</h4>
             <ul className="space-y-3">
@@ -117,10 +89,10 @@ export default function Footer() {
 
           {/* Legal */}
           <div
-            className={`md:col-span-2 transition-all duration-700 ${
+            className={`col-span-1 md:col-span-3 transition-all duration-700 ${
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
             }`}
-            style={{ transitionDelay: isVisible ? "350ms" : "0ms" }}
+            style={{ transitionDelay: isVisible ? "250ms" : "0ms" }}
           >
             <h4 className="text-[#1A1614] dark:text-[#E8E0D4] text-sm font-semibold mb-4">Legal</h4>
             <ul className="space-y-3">

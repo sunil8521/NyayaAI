@@ -85,7 +85,7 @@ export default function Navbar() {
 
 
             <Link
-              href="#about"
+              href="/#about"
               onClick={() => setActiveNav("About")}
               className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${activeNav === "About"
                   ? "text-[#C7A064]"
@@ -100,7 +100,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="#features"
+              href="/#features"
               onClick={() => setActiveNav("Features")}
               className={`relative py-1 text-base font-semibold tracking-wide transition-colors duration-300 group ${activeNav === "Features"
                   ? "text-[#C7A064]"
@@ -207,7 +207,7 @@ export default function Navbar() {
 
 
           <Link
-            href="#about"
+            href="/#about"
             onClick={() => {
               setActiveNav("About");
               closeMobileMenu();
@@ -217,7 +217,7 @@ export default function Navbar() {
             About
           </Link>
           <Link
-            href="#features"
+            href="/#features"
             onClick={() => {
               setActiveNav("Features");
               closeMobileMenu();
