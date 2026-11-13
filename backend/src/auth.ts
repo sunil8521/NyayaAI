@@ -6,12 +6,12 @@ import nodemailer from 'nodemailer';
 import 'dotenv/config';
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-  port: parseInt(process.env.SMTP_PORT || '465'),
+  host: process.env.SMTP_HOST?.replace(/["']/g, '').trim() || 'smtp.hostinger.com',
+  port: parseInt(process.env.SMTP_PORT?.replace(/["']/g, '').trim() || '465'),
   secure: true, // true for 465, false for other ports
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
+    user: process.env.EMAIL_USER?.replace(/["']/g, '').trim(),
+    pass: process.env.EMAIL_PASSWORD?.replace(/["']/g, '').trim(),
   },
 });
 
@@ -70,6 +70,7 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      prompt: 'select_account',
     },
   },
   user: {
