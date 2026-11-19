@@ -21,12 +21,17 @@ from FlagEmbedding import BGEM3FlagModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # ── Hardware & Model Configuration ────────────────────────────────
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-USE_FP16 = torch.cuda.is_available()
+if not torch.cuda.is_available():
+    raise RuntimeError("FATAL: CUDA is not available! This service requires an NVIDIA GPU and cannot fall back to CPU.")
+
+DEVICE = "cuda:0"
+USE_FP16 = True
 DEFAULT_BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 API_KEY = os.getenv("API_KEY", "").strip()
+# Must strictly match CPU service (768) so truncation behavior is 100% identical
+MAX_LENGTH = int(os.getenv("MAX_LENGTH", "768"))
 
-print(f"🚀 Initializing Embedding Microservice on device: {DEVICE} (FP16: {USE_FP16})")
+print(f"🚀 Initializing Embedding Microservice on device: {DEVICE} (FP16: {USE_FP16}, max_length: {MAX_LENGTH})")
 
 # ── Document Type Category Descriptions for Auto-Classification ──
 DOC_TYPE_DESCRIPTIONS = {
@@ -106,7 +111,7 @@ def _precompute_category_embeddings():
         output = model.encode(
             descriptions,
             batch_size=len(descriptions),
-            max_length=1024,
+            max_length=MAX_LENGTH,
             return_dense=True,
             return_sparse=False,
             return_colbert_vecs=False,
@@ -114,7 +119,8 @@ def _precompute_category_embeddings():
     vecs = output["dense_vecs"]  # numpy array (N, 1024)
 
     for i, key in enumerate(keys):
-        _category_embeddings[key] = vecs[i] / np.linalg.norm(vecs[i])  # L2 normalize
+        norm = float(np.linalg.norm(vecs[i]))
+        _category_embeddings[key] = vecs[i] / norm if norm > 0 else vecs[i]
 
     print(f"✅ Precomputed {len(_category_embeddings)} category embeddings for classification on {DEVICE}")
 
@@ -210,15 +216,15 @@ class ClassifyResponse(BaseModel):
 def health():
     """Healthcheck endpoint returning GPU device info and VRAM stats."""
     gpu_available = torch.cuda.is_available()
-    gpu_info = None
+    if not gpu_available:
+        raise HTTPException(status_code=503, detail="GPU Unavailable: CUDA device not detected")
 
-    if gpu_available:
-        gpu_info = {
-            "name": torch.cuda.get_device_name(0),
-            "allocated_mb": round(torch.cuda.memory_allocated(0) / (1024 * 1024), 2),
-            "reserved_mb": round(torch.cuda.memory_reserved(0) / (1024 * 1024), 2),
-            "total_mb": round(torch.cuda.get_device_properties(0).total_memory / (1024 * 1024), 2),
-        }
+    gpu_info = {
+        "name": torch.cuda.get_device_name(0),
+        "allocated_mb": round(torch.cuda.memory_allocated(0) / (1024 * 1024), 2),
+        "reserved_mb": round(torch.cuda.memory_reserved(0) / (1024 * 1024), 2),
+        "total_mb": round(torch.cuda.get_device_properties(0).total_memory / (1024 * 1024), 2),
+    }
 
     return {
         "status": "ok",
@@ -226,6 +232,7 @@ def health():
         "fp16": USE_FP16,
         "gpu": gpu_info,
         "default_batch_size": DEFAULT_BATCH_SIZE,
+        "max_length": MAX_LENGTH,
     }
 
 
@@ -233,7 +240,7 @@ def health():
 def embed(req: EmbedRequest):
     """
     Generate dense (1024-dim) and sparse lexical vectors using BGE-M3 on GPU.
-    Supports parallel batching up to 256 chunks.
+    Supports parallel batching up to 256 chunks with identical max_length (768) to CPU.
     """
     if not req.texts:
         return EmbedResponse(dense=[], sparse=[])
@@ -245,7 +252,7 @@ def embed(req: EmbedRequest):
         output = model.encode(
             req.texts,
             batch_size=batch_size,
-            max_length=8192,
+            max_length=MAX_LENGTH,
             return_dense=True,
             return_sparse=True,
             return_colbert_vecs=False,
@@ -266,6 +273,12 @@ def embed(req: EmbedRequest):
             values.append(float(v))
         sparse.append(SparseVector(indices=indices, values=values))
 
+    # Strict output parity validation
+    if len(dense) != len(req.texts) or len(sparse) != len(req.texts):
+        raise RuntimeError(
+            f"Embedding count mismatch: sent {len(req.texts)}, received {len(dense)} dense and {len(sparse)} sparse"
+        )
+
     duration_ms = round((time.time() - start_time) * 1000, 2)
     print(f"⚡ [GPU Embed] Embedded {len(req.texts)} texts in {duration_ms}ms (batch_size={batch_size})")
 
@@ -276,7 +289,7 @@ def embed(req: EmbedRequest):
 def rerank(req: RerankRequest):
     """
     Re-rank documents against a query using BGE-Reranker-v2-m3 in FP16 on GPU.
-    Processes all candidates in parallel batches without CPU latency bottlenecks.
+    Truncates at max_length=512 for consistent scoring with the CPU reranker.
     """
     if not req.documents:
         return RerankResponse(scores=[])
@@ -290,7 +303,7 @@ def rerank(req: RerankRequest):
             padding=True,
             truncation=True,
             return_tensors="pt",
-            max_length=2048,
+            max_length=512,
         ).to(DEVICE)
 
         outputs = reranker_model(**inputs)
@@ -314,13 +327,15 @@ def classify(req: ClassifyRequest):
         output = model.encode(
             [req.text],
             batch_size=1,
-            max_length=1024,
+            max_length=MAX_LENGTH,
             return_dense=True,
             return_sparse=False,
             return_colbert_vecs=False,
         )
     doc_vec = output["dense_vecs"][0]
-    doc_vec = doc_vec / np.linalg.norm(doc_vec)  # L2 normalize
+    norm = float(np.linalg.norm(doc_vec))
+    if norm > 0:
+        doc_vec = doc_vec / norm  # L2 normalize safe from zero division
 
     # Cosine similarity against each category
     scores = {}
