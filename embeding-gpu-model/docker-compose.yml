@@ -7,6 +7,7 @@ services:
     container_name: embedding-gpu-server
     restart: unless-stopped
     ports:
+      - "80:8000"
       - "8000:8000"
     environment:
       - BATCH_SIZE=${BATCH_SIZE:-32}
@@ -26,3 +27,4 @@ services:
 volumes:
   model_cache:
     name: rocky_hf_model_cache
+
