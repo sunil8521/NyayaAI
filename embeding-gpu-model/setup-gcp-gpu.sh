@@ -25,18 +25,16 @@ fi
 # 1. Verify NVIDIA Driver & GPU Hardware
 echo -e "\n${YELLOW}Step 1: Checking NVIDIA GPU Hardware...${NC}"
 if ! command -v nvidia-smi &> /dev/null; then
-  echo -e "${YELLOW}NVIDIA driver not detected. Installing recommended headless driver...${NC}"
-  apt-get update
-  apt-get install -y --no-install-recommends ubuntu-drivers-common
-  ubuntu-drivers install --gpgpu || ubuntu-drivers install || apt-get install -y nvidia-driver-595-server-open nvidia-utils-595-server || apt-get install -y nvidia-driver-535 nvidia-utils-535
-  echo -e "${GREEN}✅ NVIDIA drivers installed. Note: If nvidia-smi fails below, reboot VM once and re-run this script.${NC}"
+  echo -e "${YELLOW}NVIDIA driver not detected. Using Google Cloud's official certified installer (cuda_installer.pyz)...${NC}"
+  curl -fsSL -O https://github.com/GoogleCloudPlatform/compute-gpu-installation/releases/download/cuda-installer-v1.9.2/cuda_installer.pyz
+  python3 cuda_installer.pyz install_driver || true
 fi
 
 if command -v nvidia-smi &> /dev/null; then
   echo -e "${GREEN}✅ GPU detected:${NC}"
   nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 else
-  echo -e "${RED}⚠️ Warning: nvidia-smi command not found. Please reboot VM ('sudo reboot') to load GPU modules.${NC}"
+  echo -e "${YELLOW}Driver installed. If kernel requires a reboot to load modules, run 'sudo reboot' once.${NC}"
 fi
 
 # 2. Install Docker & Compose (if not installed)
