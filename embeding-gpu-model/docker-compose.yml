@@ -1,0 +1,28 @@
+services:
+  embedding-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rocky-embedding-gpu:latest
+    container_name: embedding-gpu-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - BATCH_SIZE=${BATCH_SIZE:-32}
+      - API_KEY=${API_KEY:-}
+      - HF_HOME=/app/model_cache
+    volumes:
+      # Persistent cache for Hugging Face model weights so restarts don't re-download
+      - model_cache:/app/model_cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  model_cache:
+    name: rocky_hf_model_cache
