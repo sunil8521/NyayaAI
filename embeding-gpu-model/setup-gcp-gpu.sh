@@ -25,10 +25,10 @@ fi
 # 1. Verify NVIDIA Driver & GPU Hardware
 echo -e "\n${YELLOW}Step 1: Checking NVIDIA GPU Hardware...${NC}"
 if ! command -v nvidia-smi &> /dev/null; then
-  echo -e "${YELLOW}NVIDIA driver not detected. Installing recommended headless driver (nvidia-driver-535)...${NC}"
+  echo -e "${YELLOW}NVIDIA driver not detected. Installing recommended headless driver...${NC}"
   apt-get update
   apt-get install -y --no-install-recommends ubuntu-drivers-common
-  apt-get install -y nvidia-driver-535 nvidia-utils-535
+  ubuntu-drivers install --gpgpu || ubuntu-drivers install || apt-get install -y nvidia-driver-595-server-open nvidia-utils-595-server || apt-get install -y nvidia-driver-535 nvidia-utils-535
   echo -e "${GREEN}✅ NVIDIA drivers installed. Note: If nvidia-smi fails below, reboot VM once and re-run this script.${NC}"
 fi
 
@@ -137,3 +137,4 @@ else
   echo -e "${RED}⚠️ Healthcheck timed out. Check container logs with:${NC}"
   echo -e "docker logs -f embedding-gpu-server"
 fi
+
